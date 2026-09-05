@@ -10989,8 +10989,10 @@ async function init() {
   console.log("🔎 Testing raw HTTPS connectivity to Discord's REST API...");
   const restTestStart = Date.now();
   fetch("https://discord.com/api/v10/gateway", { signal: AbortSignal.timeout(10000) })
-    .then(res => res.json())
-    .then(data => console.log(`✅ REST connectivity OK (${Date.now() - restTestStart}ms) — gateway URL: ${data.url}`))
+    .then(async res => {
+      const bodyText = await res.text();
+      console.log(`✅ Response received (${Date.now() - restTestStart}ms) — HTTP ${res.status} — body: ${bodyText.slice(0, 300)}`);
+    })
     .catch(err => console.error(`❌ REST connectivity FAILED (${Date.now() - restTestStart}ms):`, err.message));
 
   // Render (and most free-tier hosts) require the process to bind to a port
