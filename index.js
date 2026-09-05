@@ -10981,6 +10981,18 @@ async function init() {
     }, { priority: isDonInteraction });
   });
 
+  // Diagnostic: isolate whether basic HTTPS connectivity to Discord's REST
+  // API works at all from this host, separately from the gateway WebSocket
+  // handshake client.login() does internally. If THIS also hangs/fails, the
+  // problem is network-level (Render can't reach Discord at all) rather than
+  // anything specific to the gateway/WebSocket layer.
+  console.log("🔎 Testing raw HTTPS connectivity to Discord's REST API...");
+  const restTestStart = Date.now();
+  fetch("https://discord.com/api/v10/gateway", { signal: AbortSignal.timeout(10000) })
+    .then(res => res.json())
+    .then(data => console.log(`✅ REST connectivity OK (${Date.now() - restTestStart}ms) — gateway URL: ${data.url}`))
+    .catch(err => console.error(`❌ REST connectivity FAILED (${Date.now() - restTestStart}ms):`, err.message));
+
   // Render (and most free-tier hosts) require the process to bind to a port
   // to consider a Web Service "live" — without this, the bot itself runs
   // fine but the deploy sits at "in progress" forever since Render's port
