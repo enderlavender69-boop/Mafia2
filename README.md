@@ -1,2 +1,1 @@
-# Mafia2
-clint wontdo it
+# discord-bot
