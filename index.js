@@ -10981,6 +10981,14 @@ async function init() {
     }, { priority: isDonInteraction });
   });
 
+  // Render (and most free-tier hosts) require the process to bind to a port
+  // to consider a Web Service "live" — without this, the bot itself runs
+  // fine but the deploy sits at "in progress" forever since Render's port
+  // scan never finds anything to detect. This also gives the external
+  // uptime-pinger (UptimeRobot etc.) something to hit to prevent the free
+  // tier from sleeping the service after 15 min idle.
+  require("./keepalive.js").startKeepAlive();
+
   client.login(process.env.DISCORD_TOKEN);
 }
 
