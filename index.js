@@ -8743,7 +8743,7 @@ const commands = [
     .toJSON(),
   new SlashCommandBuilder()
     .setName("reset-bank")
-    .setDescription("Reset one player's bank account entirely — balance to 0, vault tier back to Shoebox (Mr.EnderLavender only)")
+    .setDescription("Reset a player's bank to 0, vault tier back to Shoebox (Mr.EnderLavender only)")
     .addUserOption(opt => opt.setName("user").setDescription("Whose bank to reset").setRequired(true))
     .toJSON(),
   new SlashCommandBuilder()
