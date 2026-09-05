@@ -10989,7 +10989,22 @@ async function init() {
   // tier from sleeping the service after 15 min idle.
   require("./keepalive.js").startKeepAlive();
 
-  client.login(process.env.DISCORD_TOKEN);
+  // client.login() was previously fire-and-forget with no .catch() — if it
+  // ever rejected (bad token, network issue reaching Discord's gateway,
+  // etc.) that became an unhandled promise rejection with no context, and
+  // if the gateway connection just hung instead of rejecting, there was
+  // NO visibility into that at all: no error, no timeout, nothing. Both are
+  // now explicit.
+  console.log("🔌 Attempting Discord gateway login...");
+  const loginTimeout = setTimeout(() => {
+    console.error("⏱️ client.login() has not resolved after 30s — likely a hung gateway connection, not a rejected login (a bad token usually fails within a few seconds, not silently hangs).");
+  }, 30000);
+  client.login(process.env.DISCORD_TOKEN)
+    .then(() => clearTimeout(loginTimeout))
+    .catch((err) => {
+      clearTimeout(loginTimeout);
+      console.error("❌ client.login() rejected:", err.message);
+    });
 }
 
 init().catch(err => { console.error("Fatal startup error:", err.message); process.exit(1); }); // redeploy trigger
