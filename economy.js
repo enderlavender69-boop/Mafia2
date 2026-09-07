@@ -99,7 +99,7 @@ const AMOUNT_SUFFIXES = [
   ["no",  1e30], // nonillion
   ["oc",  1e27], // octillion
   ["sp",  1e24], // septillion
-  ["sex", 1e21], // sextillion
+  ["sx",  1e21], // sextillion
   ["qt",  1e18], // quintillion
   ["qd",  1e15], // quadrillion
   ["t",   1e12], // trillion
@@ -111,7 +111,7 @@ const AMOUNT_SUFFIXES = [
 function parseBet(amount) {
   if (amount === null || amount === undefined) return null;
   const str = String(amount).trim();
-  const m = str.match(/^(\d+(?:\.\d+)?)\s*(k|m|b|t|qd|qt|sex|sp|oc|no|dc)?$/i);
+  const m = str.match(/^(\d+(?:\.\d+)?)\s*(k|m|b|t|qd|qt|sx|sp|oc|no|dc)?$/i);
   if (!m) {
     // Fallback for plain ints that don't match the shorthand pattern
     const num = parseInt(str);
@@ -419,7 +419,7 @@ function fmt(n) {
   } else {
     // AMOUNT_SUFFIXES is ordered largest-first; find the biggest unit that
     // fits so a whale balance always lands in the highest applicable tier
-    // (e.g. a number in the sextillions shows as "...sex", not a huge
+    // (e.g. a number in the sextillions shows as "...sx", not a huge
     // number of "qt").
     const tier = AMOUNT_SUFFIXES.find(([, mult]) => n >= mult);
     out = tier ? unit(n / tier[1], tier[0]) : unit(n / 1e3, "k");

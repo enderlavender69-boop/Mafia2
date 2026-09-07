@@ -9,7 +9,7 @@ const { startTurnTimer, clearTurnTimer, updateClock, getClockLine } = chessModul
 const eco = require("./economy.js");
 const bank = require("./bank.js");
 const features = require("./features.js");
-const firms = require("./firms.js");
+const casino = require("./casino.js");const firms = require("./firms.js");
 const jobs = require("./jobs.js");
 const stockChart = require("./stockchart.js");
 const { tickFirmCandles } = require("./firmchart.js");
@@ -4764,18 +4764,18 @@ function detectMasterCommand(text, message, explicitTrigger) {
   // Admin economy commands
   if (/\bcosa\s+set\s+balance\b/.test(lower) && targetId) {
     const cleanT = text.replace(/<@!?\d+>/g,"").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "eco_set", targetId, amount: m?.[1], tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+reset\s+balance\b/.test(lower) && targetId) return { action: "eco_reset", targetId };
   if (/\bcosa\s+give\b/.test(lower) && targetId && !/\brole\b/i.test(lower)) {
     const cleanT = text.replace(/<@!?\d+>/g,"").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "eco_give", targetId, amount: m?.[1], tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+take\b/.test(lower) && targetId) {
     const cleanT = text.replace(/<@!?\d+>/g,"").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "eco_take", targetId, amount: m?.[1], tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+tax\b/.test(lower) && targetId) {
@@ -4809,8 +4809,8 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+eco\s+stats\b/.test(lower)) return { action: "eco_stats" };
   if (/\bcosa\s+eco\s+wipe\s+rich\b/.test(lower)) return { action: "wipe_rich" };
   if (/\bcosa\s+daily\s+rates\b/.test(lower)) return { action: "daily_rates" };
-  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+bank\s+upgrade\b/.test(lower)) return { action: "bank_upgrade" };
   if (/\bcosa\s+bank\s+tiers\b/.test(lower)) return { action: "bank_tiers" };
   if (/\bcosa\s+bank\b/.test(lower)) return { action: "bank_balance" };
@@ -4828,8 +4828,8 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+mood\b/.test(lower)) return { action: "show_mood" };
   // Economy commands
   if (/\bcosa\s+balance\b/.test(lower)) return { action: "balance", targetId: targetId || message.author.id };
-  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+bank\s+upgrade\b/.test(lower)) return { action: "bank_upgrade" };
   if (/\bcosa\s+bank\s+tiers\b/.test(lower)) return { action: "bank_tiers" };
   if (/\bcosa\s+bank\b/.test(lower)) return { action: "bank_balance" };
@@ -4853,7 +4853,7 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+(leaderboard|richest|lb)\b/.test(lower)) return { action: "leaderboard" };
   if (/\bcosa\s+pay\b/.test(lower) && targetId) {
     const cleanText = text.replace(/<@!?\d+>/g, "").trim();
-    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "pay", targetId, amount: amtMatch?.[1], tier: normalizeTierAlias(amtMatch?.[2]) };
   }
   if (/\bcosa\s+rob\s+bank\b/.test(lower) && targetId) return { action: "rob_bank", targetId };
@@ -4862,29 +4862,64 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+normal\s+loan\b/.test(lower)) return { action: "loan", size: "loan" };
   if (/\bcosa\s+elite\s+loan\b/.test(lower)) return { action: "loan", size: "elite" };
   if (/\bcosa\s+ultra\s+loan\b/.test(lower)) return { action: "loan", size: "ultra" };
-  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+debt\b/.test(lower)) return { action: "check_debt" };
   if (/\bcosa\s+slots\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "slots", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+coinflip\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "coinflip", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), choice: /heads/i.test(text) ? "heads" : /tails/i.test(text) ? "tails" : null };
   }
   if (/\bcosa\s+wheel\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+blackjack\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+(hit|stand)\b/.test(lower)) return { action: lower.includes("hit") ? "bj_hit" : "bj_stand" };
   if (/\bcosa\s+race\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "race", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
+  }
+  if (/\bcosa\s+roulette\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+roulette/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    // Check color words against the FULL text, not just what's left after the
+    // amount match — "black" starts with "b", which the amount regex's
+    // billion-suffix alternative greedily swallows (e.g. "500 black" was
+    // parsing as amount="500 b" + leftover "lack", silently losing the
+    // color). "red"/"black" can't collide with any real amount+suffix
+    // combination, so matching against cleanT directly is safe.
+    let betType = null, betValue = null;
+    if (/\bred\b/i.test(cleanT)) { betType = "color"; betValue = "red"; }
+    else if (/\bblack\b/i.test(cleanT)) { betType = "color"; betValue = "black"; }
+    else {
+      const afterAmount = m ? cleanT.slice(m.index + m[0].length) : cleanT;
+      const numMatch = afterAmount.match(/\b(\d{1,2})\b/);
+      if (numMatch) { const n = parseInt(numMatch[1]); if (n >= 0 && n <= 36) { betType = "number"; betValue = n; } }
+    }
+    return { action: "roulette", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), betType, betValue };
+  }
+  if (/\bcosa\s+myster(?:y)?\s*box\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+myster(?:y)?\s*box/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    return { action: "mysterybox", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
+  }
+  if (/\bcosa\s+arena\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+arena/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const tierMatch = cleanT.match(/\b(easy|medium|hard|extreme|nightmare|boss)\b/i);
+    return { action: "arena", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), difficulty: tierMatch?.[1]?.toLowerCase() || null };
+  }
+  if (/\bcosa\s+mines(?:weeper)?\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+mines(?:weeper)?/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    return { action: "minesweeper", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
 
   if (explicitTrigger && /\bfamily\s+ledger\b/i.test(lower)) return { action: "family_ledger" };
@@ -5008,7 +5043,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+gang\s+bribe\s+decline\b/.test(lower)) return { action: "gang_bribe_decline" };
   if (/\bcosa\s+gang\s+bribe\b/.test(lower) && targetId) {
     const cleanText = text.replace(/<@!?\d+>/g, "").trim();
-    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "gang_bribe", targetId, amount: amtMatch?.[1], tier: normalizeTierAlias(amtMatch?.[2]) };
   }
   if (/\bcosa\s+gang\b/.test(lower)) return { action: "gang_info", gangName: "", targetId };
@@ -5090,7 +5125,7 @@ function detectPublicCommand(text, message) {
 
   // ── Giveaway ─────────────────────────────────────────────────────────────
   if (/\bcosa\s+giveaway\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?\s+([\dhms]+)/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?\s+([\dhms]+)/i);
     return m ? { action: "giveaway", amount: m[1], tier: normalizeTierAlias(m[2]), duration: m[3] } : { action: "giveaway_help" };
   }
   if (/\bcosa\s+greroll\b/.test(lower) || /\bcosa\s+giveaway\s+reroll\b/.test(lower)) {
@@ -5109,7 +5144,7 @@ function detectPublicCommand(text, message) {
   // ── Heist ─────────────────────────────────────────────────────────────────
   if (/\bcosa\s+heist\s+join\b/.test(lower)) return { action: "heist_join" };
   if (/\bcosa\s+heist\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return m ? { action: "heist_start", amount: m[1], tier: normalizeTierAlias(m[2]) } : null;
   }
 
@@ -5203,7 +5238,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+(leaderboard|richest|lb)\b/.test(lower)) return { action: "leaderboard" };
   if (/\bcosa\s+pay\b/.test(lower) && targetId) {
     const cleanText = text.replace(/<@!?\d+>/g, "").trim();
-    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "pay", targetId, amount: amtMatch?.[1], tier: normalizeTierAlias(amtMatch?.[2]) };
   }
   if (/\bcosa\s+rob\s+bank\b/.test(lower) && targetId) return { action: "rob_bank", targetId };
@@ -5212,20 +5247,55 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+normal\s+loan\b/.test(lower)) return { action: "loan", size: "loan" };
   if (/\bcosa\s+elite\s+loan\b/.test(lower)) return { action: "loan", size: "elite" };
   if (/\bcosa\s+ultra\s+loan\b/.test(lower)) return { action: "loan", size: "ultra" };
-  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+debt\b/.test(lower)) return { action: "check_debt" };
-  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+bank\s+upgrade\b/.test(lower)) return { action: "bank_upgrade" };
   if (/\bcosa\s+bank\s+tiers\b/.test(lower)) return { action: "bank_tiers" };
   if (/\bcosa\s+bank\b/.test(lower)) return { action: "bank_balance" };
-  if (/\bcosa\s+slots\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "slots", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+coinflip\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "coinflip", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), choice: /heads/i.test(text) ? "heads" : /tails/i.test(text) ? "tails" : null }; }
-  if (/\bcosa\s+wheel\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+blackjack\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+slots\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "slots", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+coinflip\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "coinflip", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), choice: /heads/i.test(text) ? "heads" : /tails/i.test(text) ? "tails" : null }; }
+  if (/\bcosa\s+wheel\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+blackjack\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+(hit|stand)\b/.test(lower)) return { action: lower.includes("hit") ? "bj_hit" : "bj_stand" };
-  if (/\bcosa\s+race\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:k|m|b|t|qd|qt|sex|sp|oc|no|dc)?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "race", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+race\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "race", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+roulette\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+roulette/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    // Check color words against the FULL text, not just what's left after the
+    // amount match — "black" starts with "b", which the amount regex's
+    // billion-suffix alternative greedily swallows (e.g. "500 black" was
+    // parsing as amount="500 b" + leftover "lack", silently losing the
+    // color). "red"/"black" can't collide with any real amount+suffix
+    // combination, so matching against cleanT directly is safe.
+    let betType = null, betValue = null;
+    if (/\bred\b/i.test(cleanT)) { betType = "color"; betValue = "red"; }
+    else if (/\bblack\b/i.test(cleanT)) { betType = "color"; betValue = "black"; }
+    else {
+      const afterAmount = m ? cleanT.slice(m.index + m[0].length) : cleanT;
+      const numMatch = afterAmount.match(/\b(\d{1,2})\b/);
+      if (numMatch) { const n = parseInt(numMatch[1]); if (n >= 0 && n <= 36) { betType = "number"; betValue = n; } }
+    }
+    return { action: "roulette", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), betType, betValue };
+  }
+  if (/\bcosa\s+myster(?:y)?\s*box\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+myster(?:y)?\s*box/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    return { action: "mysterybox", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
+  }
+  if (/\bcosa\s+arena\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+arena/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const tierMatch = cleanT.match(/\b(easy|medium|hard|extreme|nightmare|boss)\b/i);
+    return { action: "arena", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), difficulty: tierMatch?.[1]?.toLowerCase() || null };
+  }
+  if (/\bcosa\s+mines(?:weeper)?\b/.test(lower)) {
+    const cleanT = text.replace(/cosa\s+mines(?:weeper)?/i, "").trim();
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    return { action: "minesweeper", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
+  }
 
   // ── Firms ─────────────────────────────────────────────────────────────────
   if (/\bcosa\s+firm\s+create\b/.test(lower)) {
@@ -5520,7 +5590,7 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
   }
 
   // Route eco commands to public handler
-  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place"];
+  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","roulette","mysterybox","arena","minesweeper","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place"];
   if (ecoActions.includes(action)) {
     return await executePublicCommand(message, cmd, channelId);
   }
@@ -7634,6 +7704,137 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
         ? "🏆 **YOUR HORSE WON! " + picked.odds + "x** — **💵 " + eco.fmt(payout) + " Cash**!"
         : "💀 **" + winner.name + " wins.** Not your horse. Lost **💵 " + eco.fmt(bet) + " Cash**.";
       return "🏇 **FAMILY RACES**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nYou bet on: **" + picked.name + "** (" + picked.odds + "x)\n\n" + raceLines + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + raceResult;
+    }
+    case "roulette": {
+      const bet = eco.parseBet(cmd.amount, cmd.tier);
+      if (!bet) return "Invalid bet.";
+      if (!cmd.betType) return "Bet on a number (0-36) or a color. Example: **Cosa roulette 100 red** or **Cosa roulette 100 17**";
+      const cooldownMsgRL = await checkGambleCooldown(message.author.id);
+      if (cooldownMsgRL) return cooldownMsgRL;
+      const MAX_ROULETTE = eco.getMaxBet(message.author.id, Infinity);
+      if (bet > MAX_ROULETTE && !donExempt(message.author.id)) {
+        if (await offerWhiteMoneyBypass(message, "roulette", bet, null, Infinity)) return null;
+        return `Max bet is **💵 ${eco.fmt(MAX_ROULETTE)} Cash** per spin.` + (MAX_ROULETTE !== Infinity ? " (Recently-received Cash is capped at 5M/bet for 24h.)" : "");
+      }
+      if (!donExempt(message.author.id)) {
+        const deducted = await eco.deductCopper(message.author.id, bet);
+        if (!deducted) return "Insufficient funds. Check your balance with **Cosa balance**.";
+      }
+      const rlResult = casino.playRoulette(cmd.betType, cmd.betValue);
+      const rlColorEmoji = rlResult.color === "red" ? "🔴" : rlResult.color === "black" ? "⚫" : "🟢";
+      const rlBetDesc = cmd.betType === "number" ? `number **${cmd.betValue}**` : `**${cmd.betValue}**`;
+      let rlMsg = "🎡 **ROULETTE**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nBall landed on: " + rlColorEmoji + " **" + rlResult.result + "** (" + rlResult.color + ")\nYou bet on: " + rlBetDesc + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+      if (rlResult.won) {
+        const rlPayout = Math.floor(bet * rlResult.multiplier);
+        if (!donExempt(message.author.id)) {
+          const { paid } = await eco.payoutOrRefund(message.author.id, rlPayout, message.author.id, bet);
+          if (!paid) return "⚠️ Something went wrong crediting your winnings — your bet was refunded. Please try again.";
+        }
+        rlMsg += "✅ **WINNER! " + rlResult.multiplier + "x** — You won **💵 " + eco.fmt(rlPayout) + " Cash**!";
+      } else {
+        rlMsg += "💀 **No dice.** You lost **💵 " + eco.fmt(bet) + " Cash**. The house always wins.";
+        if (!donExempt(message.author.id)) {
+          await eco.addCopper(MASTER_ID, bet).catch(()=>{});
+          addToTreasuryFees(bet, "gambling");
+          await bank.deposit(MASTER_ID, bet).catch(()=>{});
+        }
+      }
+      return rlMsg;
+    }
+    case "mysterybox": {
+      const bet = eco.parseBet(cmd.amount, cmd.tier);
+      if (!bet) return "Invalid bet.";
+      const cooldownMsgMB = await checkGambleCooldown(message.author.id);
+      if (cooldownMsgMB) return cooldownMsgMB;
+      const MAX_MYSTERYBOX = eco.getMaxBet(message.author.id, Infinity);
+      if (bet > MAX_MYSTERYBOX && !donExempt(message.author.id)) {
+        if (await offerWhiteMoneyBypass(message, "mysterybox", bet, null, Infinity)) return null;
+        return `Max bet is **💵 ${eco.fmt(MAX_MYSTERYBOX)} Cash** per box.` + (MAX_MYSTERYBOX !== Infinity ? " (Recently-received Cash is capped at 5M/bet for 24h.)" : "");
+      }
+      if (!donExempt(message.author.id)) {
+        const deducted = await eco.deductCopper(message.author.id, bet);
+        if (!deducted) return "Insufficient funds. Check your balance with **Cosa balance**.";
+      }
+      const mbStage = casino.playMysteryBox();
+      let mbMsg = "🎁 **MYSTERY BOX**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nYou open the box...\n\n**" + mbStage.label + "**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+      if (mbStage.multiplier > 0) {
+        const mbPayout = Math.floor(bet * mbStage.multiplier);
+        if (!donExempt(message.author.id)) {
+          const { paid } = await eco.payoutOrRefund(message.author.id, mbPayout, message.author.id, bet);
+          if (!paid) return "⚠️ Something went wrong crediting your winnings — your bet was refunded. Please try again.";
+        }
+        mbMsg += mbStage.multiplier >= 8
+          ? "🎉 **" + mbStage.multiplier + "x!** You won **💵 " + eco.fmt(mbPayout) + " Cash**!"
+          : "✅ **" + mbStage.multiplier + "x** — You got **💵 " + eco.fmt(mbPayout) + " Cash** back.";
+      } else {
+        mbMsg += "💀 **Empty box.** You lost **💵 " + eco.fmt(bet) + " Cash**.";
+        if (!donExempt(message.author.id)) {
+          await eco.addCopper(MASTER_ID, bet).catch(()=>{});
+          addToTreasuryFees(bet, "gambling");
+          await bank.deposit(MASTER_ID, bet).catch(()=>{});
+        }
+      }
+      return mbMsg;
+    }
+    case "arena": {
+      const bet = eco.parseBet(cmd.amount, cmd.tier);
+      if (!bet) return "Invalid bet.";
+      if (!cmd.difficulty || !casino.ARENA_TIERS[cmd.difficulty]) {
+        return "Pick a difficulty: easy, medium, hard, extreme, nightmare, or boss. Example: **Cosa arena 100 hard**";
+      }
+      const cooldownMsgAR = await checkGambleCooldown(message.author.id);
+      if (cooldownMsgAR) return cooldownMsgAR;
+      const MAX_ARENA = eco.getMaxBet(message.author.id, Infinity);
+      if (bet > MAX_ARENA && !donExempt(message.author.id)) {
+        if (await offerWhiteMoneyBypass(message, "arena", bet, null, Infinity)) return null;
+        return `Max bet is **💵 ${eco.fmt(MAX_ARENA)} Cash** per fight.` + (MAX_ARENA !== Infinity ? " (Recently-received Cash is capped at 5M/bet for 24h.)" : "");
+      }
+      if (!donExempt(message.author.id)) {
+        const deducted = await eco.deductCopper(message.author.id, bet);
+        if (!deducted) return "Insufficient funds. Check your balance with **Cosa balance**.";
+      }
+      const arResult = casino.playArena(cmd.difficulty);
+      let arMsg = "⚔️ **THE ARENA**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + arResult.tierData.emoji + " **" + arResult.tierData.label + "** — you face " + arResult.enemy + "!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+      if (arResult.won) {
+        const arPayout = Math.floor(bet * arResult.multiplier);
+        if (!donExempt(message.author.id)) {
+          const { paid } = await eco.payoutOrRefund(message.author.id, arPayout, message.author.id, bet);
+          if (!paid) return "⚠️ Something went wrong crediting your winnings — your bet was refunded. Please try again.";
+        }
+        arMsg += "✅ **VICTORY! " + arResult.multiplier + "x** — You won **💵 " + eco.fmt(arPayout) + " Cash**!";
+      } else {
+        arMsg += "💀 **DEFEATED.** You lost **💵 " + eco.fmt(bet) + " Cash**.";
+        if (!donExempt(message.author.id)) {
+          await eco.addCopper(MASTER_ID, bet).catch(()=>{});
+          addToTreasuryFees(bet, "gambling");
+          await bank.deposit(MASTER_ID, bet).catch(()=>{});
+        }
+      }
+      return arMsg;
+    }
+    case "minesweeper": {
+      const bet = eco.parseBet(cmd.amount, cmd.tier);
+      if (!bet) return "Invalid bet.";
+      if (casino.getMinesGame(message.author.id)) return "You already have a Minesweeper game in progress. Finish it first, or wait 3 minutes for it to time out.";
+      const cooldownMsgMS = await checkGambleCooldown(message.author.id);
+      if (cooldownMsgMS) return cooldownMsgMS;
+      const MAX_MINES = eco.getMaxBet(message.author.id, Infinity);
+      if (bet > MAX_MINES && !donExempt(message.author.id)) {
+        if (await offerWhiteMoneyBypass(message, "minesweeper", bet, null, Infinity)) return null;
+        return `Max bet is **💵 ${eco.fmt(MAX_MINES)} Cash**.` + (MAX_MINES !== Infinity ? " (Recently-received Cash is capped at 5M/bet for 24h.)" : "");
+      }
+      if (!donExempt(message.author.id)) {
+        const deducted = await eco.deductCopper(message.author.id, bet);
+        if (!deducted) return "Insufficient funds. Check your balance with **Cosa balance**.";
+      }
+      const msGame = casino.startMinesGame(message.author.id, bet);
+      const msRows = casino.buildMinesGrid(msGame);
+      const msCashoutRow = casino.buildMinesCashoutRow(message.author.id);
+      await message.reply({
+        content: "💣 **MINESWEEPER**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nBet: **💵 " + eco.fmt(bet) + " Cash** — " + casino.MINES_BOMB_COUNT + " bombs hidden in a " + casino.MINES_GRID_SIZE + "x" + casino.MINES_GRID_SIZE + " grid.\nEach safe tile raises your multiplier. Cash out anytime, or push your luck.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nCurrent multiplier: **1.00x**",
+        components: [...msRows, msCashoutRow],
+      }).catch(() => {});
+      return null; // reply already sent directly above
     }
 
     // ── AFK ─────────────────────────────────────────────────────────────────────
@@ -9931,6 +10132,96 @@ async function init() {
           (prize > 0 ? `💰 Prize for solving: **${eco.fmt(prize)}**\n` : ``) +
           `Click below to join. First click plays first — miss too many letters and the next person in line takes over with a fresh word.`,
         components: [joinRow],
+      }).catch(() => {});
+      return;
+    }
+
+    // ── Minesweeper: reveal a cell ────────────────────────────────────────────────
+    if (interaction.isButton() && interaction.customId.startsWith("mines_cell:")) {
+      const [, ownerId, idxRaw] = interaction.customId.split(":");
+      const idx = parseInt(idxRaw, 10);
+      if (interaction.user.id !== ownerId) { await interaction.reply({ content: "This isn't your game.", ephemeral: true }).catch(() => {}); return; }
+      const game = casino.getMinesGame(ownerId);
+      if (!game || game.ended) { await interaction.reply({ content: "That game's already over.", ephemeral: true }).catch(() => {}); return; }
+      const result = casino.revealMinesCell(ownerId, idx);
+      if (result.outcome === "invalid" || result.outcome === "already_revealed") {
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+      if (result.outcome === "bomb") {
+        const finalGame = casino.getMinesGame(ownerId); // still readable — endMinesGame not called yet
+        const bet = finalGame.bet;
+        casino.endMinesGame(ownerId);
+        const grid = casino.buildMinesGrid(finalGame, true);
+        let text;
+        if (result.multiplier > 0) {
+          const payout = Math.floor(bet * result.multiplier);
+          if (!donExempt(ownerId)) {
+            const { paid } = await eco.payoutOrRefund(ownerId, payout, ownerId, 0); // bet already deducted at game start
+            if (!paid) {
+              await interaction.update({ content: "⚠️ Something went wrong crediting your payout — contact an admin.", components: grid }).catch(() => {});
+              return;
+            }
+          }
+          text = `💣 **BOOM!** Hit a mine, but you got lucky — **0.5x** payout.\n💵 **${eco.fmt(payout)} Cash** credited.`;
+        } else {
+          if (!donExempt(ownerId)) {
+            await eco.addCopper(MASTER_ID, bet).catch(() => {});
+            addToTreasuryFees(bet, "gambling");
+            await bank.deposit(MASTER_ID, bet).catch(() => {});
+          }
+          text = `💣 **BOOM! BANKRUPTCY.**\nYou lost the full **💵 ${eco.fmt(bet)} Cash** bet.`;
+        }
+        await interaction.update({
+          content: "💣 **MINESWEEPER — GAME OVER**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + text,
+          components: grid,
+        }).catch(() => {});
+        return;
+      }
+      // Safe reveal
+      const cellsFound = game.revealed.size;
+      if (result.cleared) {
+        const bet = game.bet;
+        const payout = Math.floor(bet * result.multiplier);
+        casino.endMinesGame(ownerId);
+        if (!donExempt(ownerId)) {
+          const { paid } = await eco.payoutOrRefund(ownerId, payout, ownerId, 0);
+          if (!paid) { await interaction.update({ content: "⚠️ Something went wrong crediting your payout — contact an admin." }).catch(() => {}); return; }
+        }
+        const grid = casino.buildMinesGrid(game, true);
+        await interaction.update({
+          content: `💣 **MINESWEEPER — BOARD CLEARED!** 🎉\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEvery safe tile found — max payout!\n**${result.multiplier.toFixed(2)}x** — 💵 **${eco.fmt(payout)} Cash** credited.`,
+          components: grid,
+        }).catch(() => {});
+        return;
+      }
+      const grid = casino.buildMinesGrid(game);
+      const cashoutRow = casino.buildMinesCashoutRow(ownerId);
+      await interaction.update({
+        content: "💣 **MINESWEEPER**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nBet: **💵 " + eco.fmt(game.bet) + " Cash** — " + cellsFound + " safe tile(s) found.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nCurrent multiplier: **" + result.multiplier.toFixed(2) + "x** (💵 " + eco.fmt(Math.floor(game.bet * result.multiplier)) + " Cash if you cash out now)",
+        components: [...grid, cashoutRow],
+      }).catch(() => {});
+      return;
+    }
+
+    // ── Minesweeper: cash out ─────────────────────────────────────────────────────
+    if (interaction.isButton() && interaction.customId.startsWith("mines_cashout:")) {
+      const ownerId = interaction.customId.split(":")[1];
+      if (interaction.user.id !== ownerId) { await interaction.reply({ content: "This isn't your game.", ephemeral: true }).catch(() => {}); return; }
+      const game = casino.getMinesGame(ownerId);
+      if (!game || game.ended) { await interaction.reply({ content: "That game's already over.", ephemeral: true }).catch(() => {}); return; }
+      const bet = game.bet;
+      const cashout = casino.cashOutMines(ownerId);
+      const payout = Math.floor(bet * cashout.multiplier);
+      const grid = casino.buildMinesGrid(game, true);
+      casino.endMinesGame(ownerId);
+      if (payout > 0 && !donExempt(ownerId)) {
+        const { paid } = await eco.payoutOrRefund(ownerId, payout, ownerId, 0);
+        if (!paid) { await interaction.update({ content: "⚠️ Something went wrong crediting your payout — contact an admin." }).catch(() => {}); return; }
+      }
+      await interaction.update({
+        content: `💰 **CASHED OUT!**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**${cashout.multiplier.toFixed(2)}x** — 💵 **${eco.fmt(payout)} Cash** credited.`,
+        components: grid,
       }).catch(() => {});
       return;
     }
