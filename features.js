@@ -908,6 +908,10 @@ const STOCKS = {
     cryptoId: "ethereum",    // ETH
     desc: "Tracks Ethereum — never sleeps",
   },
+  // ── High-value exchange ─────────────────────────────────────
+  TITAN: { name: "🏦 Titan Holdings", basePrice: 50_000_000, volatility: 0.045, realTicker: "BRK.B", cryptoId: null, desc: "Elite-market blue chip — 5B Cash/share starting price", elite: true },
+  OMERTA: { name: "🤐 Omerta Industries", basePrice: 125_000_000, volatility: 0.060, realTicker: "JPM", cryptoId: null, desc: "Elite-market financial giant — 12.5B Cash/share starting price", elite: true },
+  CROWN: { name: "👑 Crown Consortium", basePrice: 250_000_000, volatility: 0.075, realTicker: "MSFT", cryptoId: null, desc: "Elite-market megacap — 25B Cash/share starting price", elite: true },
   // ── Penny Stocks ──────────────────────────────────────────
   COAL: {
     name: "⛏️ Coal Racket",
@@ -1094,16 +1098,18 @@ async function buyStock(userId, ticker, shares) {
   if (!stockMarketOpen) return "🔫 The market is closed. Don's orders.";
   if (shares < 1) return "🔫 Buy at least 1 share.";
 
-  const price = stockPrices[ticker];
-  const total = price * shares;
+  const price = Math.max(0, Math.floor(stockPrices[ticker] || 0));
+  const sharesInt = Math.floor(Number(shares));
+  if (!Number.isSafeInteger(sharesInt) || sharesInt < 1) return "🔫 Share quantity is invalid or too large.";
+  const totalExact = BigInt(price) * BigInt(sharesInt);
 
-  const deducted = await eco.deductCopper(userId, total).catch(() => null);
-  if (!deducted) return `🔫 You need **${eco.formatWallet(eco.fromCopper(total))}** to buy ${shares} shares of ${ticker}.`;
+  const deducted = await eco.deductCopper(userId, totalExact.toString()).catch(() => null);
+  if (!deducted) return `🔫 You need **💵 ${eco.fmt(totalExact)} Cash** to buy ${sharesInt} shares of ${ticker}.`;
 
   if (!stockPortfolios.has(userId)) {
     // Try loading from Supabase first before assuming empty
     try {
-      const { data } = await supabase.from("stock_portfolios").select("portfolio").eq("user_id", userId).single();
+      const { data } = await supabase.from("stock_portfolios").select("portfolio,avg_prices").eq("user_id", userId).single();
       if (data?.portfolio) { stockPortfolios.set(userId, JSON.parse(data.portfolio)); if (data.avg_prices) { const ap = JSON.parse(data.avg_prices); for (const [t,p] of Object.entries(ap)) avgBuyPrice.set(`${userId}-${t}`, p); } }
       else stockPortfolios.set(userId, {});
     } catch { stockPortfolios.set(userId, {}); }
@@ -1112,23 +1118,31 @@ async function buyStock(userId, ticker, shares) {
 
   // Track average buy price
   const key = `${userId}-${ticker}`;
-  const prevShares = portfolio[ticker] || 0;
-  const prevAvg = avgBuyPrice.get(key) || price;
-  const newAvg = prevShares === 0 ? price : Math.round((prevAvg * prevShares + price * shares) / (prevShares + shares));
+  const prevShares = Math.max(0, Math.floor(Number(portfolio[ticker]) || 0));
+  const prevAvg = Math.max(0, Math.floor(Number(avgBuyPrice.get(key) || price)));
+  const newShares = prevShares + sharesInt;
+  const newAvg = prevShares === 0 ? price : Number((BigInt(prevAvg) * BigInt(prevShares) + BigInt(price) * BigInt(sharesInt)) / BigInt(newShares));
   avgBuyPrice.set(key, newAvg);
 
-  portfolio[ticker] = prevShares + shares;
-  await savePortfolio(userId, portfolio);
+  const previousShares = portfolio[ticker];
+  portfolio[ticker] = newShares;
+  const saved = await savePortfolio(userId, portfolio);
+  if (!saved) {
+    if (previousShares === undefined) delete portfolio[ticker];
+    else portfolio[ticker] = previousShares;
+    await eco.addCopper(userId, totalExact.toString()).catch(() => null);
+    return "🔫 The stock purchase could not be saved. Your Cash was refunded; try again.";
+  }
 
   // Market pressure — based on share count, not copper value
   // 500 shares = ~1% pressure, 5000 shares = ~10%, max 15%
-  const pressureStrength = Math.min(0.15, shares / 50000);
+  const pressureStrength = Math.min(0.15, sharesInt / 50000);
   if (pressureStrength > 0.01) {
     if (!marketPressure[ticker]) marketPressure[ticker] = 0;
     marketPressure[ticker] += pressureStrength;
   }
 
-  await logStockTransaction(userId, ticker, "buy", shares, price, total, null);
+  await logStockTransaction(userId, ticker, "buy", sharesInt, price, totalExact.toString(), null);
 
   const pressureLine = pressureStrength > 0.01
     ? `\n📢 *Large order detected — **${ticker}** will spike on the next candle! 📈*`
@@ -1138,7 +1152,7 @@ async function buyStock(userId, ticker, shares) {
     `📈 **BOUGHT ${shares}x ${STOCKS[ticker].name} (${ticker})**\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `💰 Price per share: **${eco.formatWallet(eco.fromCopper(price))}**\n` +
-    `💸 Total spent: **${eco.formatWallet(eco.fromCopper(total))}**\n` +
+    `💸 Total spent: **${eco.formatWallet(eco.fromCopper(totalExact))}**\n` +
     `📊 Your holdings: **${portfolio[ticker]} shares**\n` +
     `📉 Avg buy price: **${eco.formatWallet(eco.fromCopper(newAvg))}**` +
     pressureLine
@@ -1152,7 +1166,7 @@ async function sellStock(userId, ticker, shares) {
 
   if (!stockPortfolios.has(userId)) {
     try {
-      const { data } = await supabase.from("stock_portfolios").select("portfolio").eq("user_id", userId).single();
+      const { data } = await supabase.from("stock_portfolios").select("portfolio,avg_prices").eq("user_id", userId).single();
       if (data?.portfolio) { stockPortfolios.set(userId, JSON.parse(data.portfolio)); if (data.avg_prices) { const ap = JSON.parse(data.avg_prices); for (const [t,p] of Object.entries(ap)) avgBuyPrice.set(`${userId}-${t}`, p); } }
       else stockPortfolios.set(userId, {});
     } catch { stockPortfolios.set(userId, {}); }
@@ -1161,39 +1175,48 @@ async function sellStock(userId, ticker, shares) {
   const held = portfolio[ticker] || 0;
   if (held < shares) return `🔫 You only have **${held} shares** of ${ticker}.`;
 
-  const price = stockPrices[ticker];
-  const total = price * shares;
+  const price = Math.max(0, Math.floor(stockPrices[ticker] || 0));
+  const sharesInt = Math.floor(Number(shares));
+  if (!Number.isSafeInteger(sharesInt) || sharesInt < 1) return "🔫 Share quantity is invalid or too large.";
+  const totalExact = BigInt(price) * BigInt(sharesInt);
 
-  // Calculate profit/loss
   const key = `${userId}-${ticker}`;
-  const avgPrice = avgBuyPrice.get(key) || price;
-  const profitLoss = (price - avgPrice) * shares;
-  const plText = profitLoss >= 0
-    ? `✅ **+${eco.formatWallet(eco.fromCopper(Math.abs(Math.round(profitLoss))))} profit**`
-    : `❌ **-${eco.formatWallet(eco.fromCopper(Math.abs(Math.round(profitLoss))))} loss**`;
+  const avgPrice = Math.max(0, Math.floor(Number(avgBuyPrice.get(key) || price)));
+  const profitLossExact = (BigInt(price) - BigInt(avgPrice)) * BigInt(sharesInt);
+  const plText = profitLossExact >= 0n
+    ? `✅ **+💵 ${eco.fmt(profitLossExact)} profit**`
+    : `❌ **-💵 ${eco.fmt(-profitLossExact)} loss**`;
 
   // Credit the cash FIRST and confirm it actually landed before touching the
   // portfolio. Previously the shares were deducted up-front and the credit
   // result was discarded (`.catch(() => {})`), so a failed wallet write —
   // most likely on very large sells — silently vanished the player's money
   // while still taking their shares.
-  const credited = await eco.addCopper(userId, total).catch(() => null);
+  const credited = await eco.addCopper(userId, totalExact.toString()).catch(() => null);
   if (!credited) {
     return `🔫 Something went wrong crediting the sale — your shares are untouched. Try again in a moment.`;
   }
 
-  portfolio[ticker] -= shares;
+  portfolio[ticker] -= sharesInt;
   if (portfolio[ticker] === 0) {
     delete portfolio[ticker];
     avgBuyPrice.delete(key);
   }
   stockPortfolios.set(userId, portfolio);
 
-  await savePortfolio(userId, portfolio);
-  await logStockTransaction(userId, ticker, "sell", shares, price, total, Math.round(profitLoss));
+  const saved = await savePortfolio(userId, portfolio);
+  if (!saved) {
+    // Restore shares and reverse the sale credit if persistence failed.
+    portfolio[ticker] = (portfolio[ticker] || 0) + sharesInt;
+    stockPortfolios.set(userId, portfolio);
+    if (avgBuyPrice.has(key)) avgBuyPrice.set(key, avgPrice);
+    await eco.deductCopper(userId, totalExact.toString()).catch(() => null);
+    return "🔫 The stock sale could not be saved. Your shares were restored; try again.";
+  }
+  await logStockTransaction(userId, ticker, "sell", sharesInt, price, totalExact.toString(), profitLossExact.toString());
 
   // Market pressure — based on share count
-  const pressureStrength = Math.min(0.15, shares / 50000);
+  const pressureStrength = Math.min(0.15, sharesInt / 50000);
   if (pressureStrength > 0.01) {
     if (!marketPressure[ticker]) marketPressure[ticker] = 0;
     marketPressure[ticker] -= pressureStrength;
@@ -1207,7 +1230,7 @@ async function sellStock(userId, ticker, shares) {
     `📉 **SOLD ${shares}x ${STOCKS[ticker].name} (${ticker})**\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `💰 Price per share: **${eco.formatWallet(eco.fromCopper(price))}**\n` +
-    `💵 Total received: **${eco.formatWallet(eco.fromCopper(total))}**\n` +
+    `💵 Total received: **${eco.formatWallet(eco.fromCopper(totalExact))}**\n` +
     `${plText}\n` +
     `📊 Remaining: **${portfolio[ticker] || 0} shares**` +
     pressureLine
@@ -1264,7 +1287,7 @@ function getMarketBoard() {
 async function getPortfolio(userId) {
   if (!stockPortfolios.has(userId)) {
     try {
-      const { data } = await supabase.from("stock_portfolios").select("portfolio").eq("user_id", userId).single();
+      const { data } = await supabase.from("stock_portfolios").select("portfolio,avg_prices").eq("user_id", userId).single();
       if (data?.portfolio) { stockPortfolios.set(userId, JSON.parse(data.portfolio)); if (data.avg_prices) { const ap = JSON.parse(data.avg_prices); for (const [t,p] of Object.entries(ap)) avgBuyPrice.set(`${userId}-${t}`, p); } }
       else stockPortfolios.set(userId, {});
     } catch { stockPortfolios.set(userId, {}); }
@@ -1352,19 +1375,23 @@ async function logStockTransaction(userId, ticker, action, shares, pricePerShare
 
 async function savePortfolio(userId, portfolio) {
   try {
-    // Save portfolio + avgBuyPrice together
+    // Save portfolio + avgBuyPrice together. Treat DB errors as real failures
+    // so a successful wallet debit can never be reported as a completed trade
+    // when the portfolio write failed.
     const avgPrices = {};
     for (const [key, val] of avgBuyPrice.entries()) {
       if (key.startsWith(userId + "-")) {
         avgPrices[key.replace(userId + "-", "")] = val;
       }
     }
-    await supabase.from("stock_portfolios").upsert({
+    const { error } = await supabase.from("stock_portfolios").upsert({
       user_id: userId,
       portfolio: JSON.stringify(portfolio),
       avg_prices: JSON.stringify(avgPrices),
     }, { onConflict: "user_id" });
-  } catch (e) { console.error("[SAVE PORTFOLIO]", e.message); }
+    if (error) throw error;
+    return true;
+  } catch (e) { console.error("[SAVE PORTFOLIO]", e.message); return false; }
 }
 
 async function loadPortfolios() {
@@ -1694,8 +1721,8 @@ const SHOP_ITEMS = {
   rob_shield: {
     id: "rob_shield",
     name: "🤐 Snitch Insurance",
-    desc: "Immune to a shakedown for 1 hour",
-    price: 50000,        // 50,000 Cash
+    desc: "Immune to a shakedown for 1 hour. Buy up to 6 at once; 50 purchases per day.",
+    price: 1000000,       // 1,000,000 Cash
     duration: 60 * 60 * 1000,
     rarity: "common",
   },
@@ -1980,6 +2007,23 @@ function clearHouseFavorArmed(userId) {
 }
 // Daily purchase tracker: userId -> { date: "YYYY-MM-DD", lucky_charm: count }
 const dailyPurchases = new Map();
+async function loadDailyPurchases() {
+  try {
+    const { data, error } = await supabase.from("shop_daily_purchases").select("*");
+    if (error) throw error;
+    dailyPurchases.clear();
+    for (const row of data || []) dailyPurchases.set(row.user_id, typeof row.data === "string" ? JSON.parse(row.data) : (row.data || {}));
+    console.log(`[SHOP] Loaded ${dailyPurchases.size} daily purchase records`);
+  } catch (e) { console.error("[SHOP DAILY LOAD]", e.message); }
+}
+async function saveDailyPurchaseRecord(userId) {
+  const record = dailyPurchases.get(userId);
+  if (!record) return;
+  try {
+    const { error } = await supabase.from("shop_daily_purchases").upsert({ user_id: userId, data: record, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (error) throw error;
+  } catch (e) { console.error("[SHOP DAILY SAVE]", e.message); }
+}
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
@@ -1995,11 +2039,9 @@ function getDailyPurchaseCount(userId, itemId) {
 function recordDailyPurchase(userId, itemId, quantity) {
   const today = getTodayKey();
   const record = dailyPurchases.get(userId);
-  if (!record || record.date !== today) {
-    dailyPurchases.set(userId, { date: today, [itemId]: quantity });
-  } else {
-    record[itemId] = (record[itemId] || 0) + quantity;
-  }
+  if (!record || record.date !== today) dailyPurchases.set(userId, { date: today, [itemId]: quantity });
+  else record[itemId] = (record[itemId] || 0) + quantity;
+  saveDailyPurchaseRecord(userId).catch(() => {});
 }
 
 // Items bought as timed buffs but which sit in inventory as stored "charges"
@@ -2013,7 +2055,7 @@ async function buyShopItem(userId, itemId, quantity = 1) {
   if (!item) return `🔫 Item not found. Check **Cosa shop** for available items.`;
   quantity = Math.floor(Number(quantity));
   if (!Number.isFinite(quantity)) quantity = 1;
-  if (itemId === "rob_shield" && quantity > 1) return `🔫 **Snitch Insurance** can only be held one at a time. Buy 1.`;
+  if (itemId === "rob_shield" && quantity > 6) return `🔫 **Snitch Insurance** is limited to **6 per purchase**.`;
   if (quantity < 1 || quantity > 25) return `🔫 Buy between 1 and 25 at a time.`;
 
   // Vault Skip — permanent, once-per-account-ever. Blocked from re-purchase both
@@ -2027,7 +2069,7 @@ async function buyShopItem(userId, itemId, quantity = 1) {
   }
 
   // Daily purchase limits
-  const DAILY_LIMITS = { lucky_charm: 12 };
+  const DAILY_LIMITS = { lucky_charm: 12, rob_shield: 50 };
   if (DAILY_LIMITS[itemId] !== undefined) {
     const alreadyBought = getDailyPurchaseCount(userId, itemId);
     const limit = DAILY_LIMITS[itemId];
@@ -2507,7 +2549,7 @@ module.exports = {
   // Shop
   SHOP_ITEMS, buyShopItem, useShopItem, hasEffect, consumeItem,
   getActiveEffectsSummary,
-  getShopDisplay, getInventoryDisplay, loadInventories, resetAllRobShields,
+  getShopDisplay, getInventoryDisplay, loadInventories, loadDailyPurchases, resetAllRobShields,
   grantItem, grantRandomQuestItem, RARITY_LABEL,
   getItemCooldownRemaining, resetInventory, isHouseFavorArmed, clearHouseFavorArmed,
   // Treasures / adventure loot

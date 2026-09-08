@@ -22,18 +22,20 @@ function rouletteColorOf(n) {
 // Straight-number hit pays 36x (35:1 profit + stake back). Color hit pays 2x
 // (1:1 profit + stake back) — standard roulette payouts.
 function playRoulette(betType, betValue) {
-  const result = Math.floor(Math.random() * 37); // 0-36 inclusive
+  const result = Math.floor(Math.random() * 37);
   const color = rouletteColorOf(result);
   let multiplier = 0;
   let won = false;
-  if (betType === "number" && result === betValue) {
-    multiplier = 36;
-    won = true;
-  } else if (betType === "color" && color === betValue) {
-    multiplier = 2;
-    won = true;
+  const type = String(betType || "").toLowerCase();
+  if (type === "number" && result === Number(betValue)) { multiplier = 36; won = true; }
+  else if (type === "color" && color === betValue) { multiplier = 2; won = true; }
+  else if (type === "parity" && result !== 0 && (result % 2 ? "odd" : "even") === betValue) { multiplier = 2; won = true; }
+  else if (type === "range" && result !== 0 && (result <= 18 ? "low" : "high") === betValue) { multiplier = 2; won = true; }
+  else if (type === "dozen") {
+    const dozen = result === 0 ? 0 : Math.ceil(result / 12);
+    if (dozen === Number(betValue)) { multiplier = 3; won = true; }
   }
-  return { result, color, multiplier, won };
+  return { result, color, multiplier, won, betType: type, betValue };
 }
 
 // ── Mystery Box ───────────────────────────────────────────────────────────────

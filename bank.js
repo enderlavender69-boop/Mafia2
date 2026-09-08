@@ -32,19 +32,23 @@ function toBigIntSafe(v) {
 // ── Vault Tiers ───────────────────────────────────────────────────────────────
 // Escalating money-laundering ladder — from a shoebox under the bed to the Don's own vault.
 const VAULT_TIERS = {
-  shoebox:    { label: "📦 Shoebox",            maxStorage: 50 * 10000,              cost: 0,                interestRate: 0.005, feeRate: 0.001, emoji: "📦" },
-  deposit:    { label: "🔑 Safety Deposit Box", maxStorage: 500 * 10000,             cost: 20 * 10000,       interestRate: 0.010, feeRate: 0.002, emoji: "🔑" },
-  safe:       { label: "🔒 The Safe",           maxStorage: 2000 * 10000,            cost: 80 * 10000,       interestRate: 0.015, feeRate: 0.003, emoji: "🔒" },
-  vault:      { label: "🏦 Bank Vault",         maxStorage: 35 * 1000000,            cost: 300 * 10000,      interestRate: 0.020, feeRate: 0.004, emoji: "🏦" },
-  offshore:   { label: "🛳️ Offshore Account",   maxStorage: 50 * 1000000,            cost: 5 * 1000000,      interestRate: 0.025, feeRate: 0.005, emoji: "🛳️" },
-  shell:      { label: "🏢 Shell Company",      maxStorage: 150 * 1000000,           cost: 20 * 1000000,     interestRate: 0.030, feeRate: 0.006, emoji: "🏢" },
-  swiss:      { label: "🇨🇭 Swiss Account",      maxStorage: 400 * 1000000,           cost: 80 * 1000000,     interestRate: 0.035, feeRate: 0.007, emoji: "🇨🇭" },
-  cayman:     { label: "🏝️ Cayman Account",     maxStorage: 1000 * 1000000,          cost: 200 * 1000000,    interestRate: 0.040, feeRate: 0.008, emoji: "🏝️" },
-  trust:      { label: "💼 Family Trust",       maxStorage: 10000 * 1000000,         cost: 500 * 1000000,    interestRate: 0.045, feeRate: 0.009, emoji: "💼" },
-  donsvault:  { label: "♾️ Don's Vault",        maxStorage: Infinity,                 cost: 0,                interestRate: 0.000, feeRate: 0.000, emoji: "♾️" },
+  shoebox:    { label: "📦 Shoebox", maxStorage: "500000", cost: "0", interestRate: 0.005, feeRate: 0.001, emoji: "📦" },
+  deposit:    { label: "🔑 Safety Deposit Box", maxStorage: "5000000", cost: "200000", interestRate: 0.010, feeRate: 0.002, emoji: "🔑" },
+  safe:       { label: "🔒 The Safe", maxStorage: "50000000", cost: "800000", interestRate: 0.015, feeRate: 0.003, emoji: "🔒" },
+  vault:      { label: "🏦 Bank Vault", maxStorage: "500000000", cost: "3000000", interestRate: 0.020, feeRate: 0.004, emoji: "🏦" },
+  offshore:   { label: "🛳️ Offshore Account", maxStorage: "5000000000", cost: "10000000", interestRate: 0.025, feeRate: 0.005, emoji: "🛳️" },
+  shell:      { label: "🏢 Shell Company", maxStorage: "50000000000", cost: "50000000", interestRate: 0.030, feeRate: 0.006, emoji: "🏢" },
+  swiss:      { label: "🇨🇭 Swiss Account", maxStorage: "500000000000", cost: "250000000", interestRate: 0.035, feeRate: 0.007, emoji: "🇨🇭" },
+  cayman:     { label: "🏝️ Cayman Account", maxStorage: "5000000000000", cost: "1000000000", interestRate: 0.040, feeRate: 0.008, emoji: "🏝️" },
+  trust:      { label: "💼 Family Trust", maxStorage: "10000000000000000", cost: "5000000000", interestRate: 0.045, feeRate: 0.009, emoji: "💼" },
+  dynasty:    { label: "🏛️ Family Dynasty", maxStorage: "1000000000000000000000", cost: "100000000000", interestRate: 0.050, feeRate: 0.010, emoji: "🏛️" },
+  sovereign:  { label: "🌐 Sovereign Reserve", maxStorage: "1000000000000000000000000", cost: "10000000000000", interestRate: 0.055, feeRate: 0.011, emoji: "🌐" },
+  cartel:     { label: "💎 Global Cartel Reserve", maxStorage: "1000000000000000000000000000", cost: "1000000000000000", interestRate: 0.060, feeRate: 0.012, emoji: "💎" },
+  decillion:  { label: "👑 Decillion Reserve", maxStorage: "10000000000000000000000000000000000", cost: "1000000000000000000", interestRate: 0.065, feeRate: 0.013, emoji: "👑" },
+  donsvault:  { label: "♾️ Don's Vault", maxStorage: Infinity, cost: "0", interestRate: 0.000, feeRate: 0.000, emoji: "♾️" },
 };
 
-const TIER_ORDER = ["shoebox","deposit","safe","vault","offshore","shell","swiss","cayman","trust","donsvault"];
+const TIER_ORDER = ["shoebox","deposit","safe","vault","offshore","shell","swiss","cayman","trust","dynasty","sovereign","cartel","decillion","donsvault"];
 
 // ── Bank Robbery — crew difficulty by vault tier ──────────────────────────────
 // min = success chance with the minimum crew (3), max = success chance with a
@@ -119,7 +123,7 @@ async function getBankAccount(userId) {
 
 async function saveBankAccount(account) {
   const { error } = await supabase.from("banks").upsert(account, { onConflict: "user_id" });
-  if (error) console.error("[SAVE BANK]", error.message);
+  if (error) { console.error("[SAVE BANK]", error.message); throw new Error(error.message); }
 }
 
 async function processBank(account, masterId, addToTreasury) {
@@ -139,10 +143,12 @@ async function processBank(account, masterId, addToTreasury) {
   // Interest/fee are computed as an approximate Number (a % of the balance)
   // — fine, since the amount itself doesn't need to be exact, only the
   // running balance it gets added to (below) does.
-  const balanceApprox = Number(balanceBig);
-  const interest = isInterestFrozen(account.user_id) ? 0 : Math.floor(balanceApprox * tier.interestRate);
-  const fee = Math.floor(balanceApprox * tier.feeRate);
-  const netBig = toBigIntSafe(interest) - toBigIntSafe(fee);
+  const RATE_SCALE = 1_000_000n;
+  const interestRateInt = BigInt(Math.round(tier.interestRate * 1_000_000));
+  const feeRateInt = BigInt(Math.round(tier.feeRate * 1_000_000));
+  const interest = isInterestFrozen(account.user_id) ? 0n : (balanceBig * interestRateInt) / RATE_SCALE;
+  const fee = (balanceBig * feeRateInt) / RATE_SCALE;
+  const netBig = interest - fee;
 
   const newBalance = balanceBig + netBig;
   account.balance = (newBalance > 0n ? newBalance : 0n).toString();
@@ -150,7 +156,7 @@ async function processBank(account, masterId, addToTreasury) {
   await saveBankAccount(account);
 
   // Fee goes to the Don's Vig
-  if (fee > 0 && addToTreasury) await addToTreasury(masterId, fee);
+  if (fee > 0n && addToTreasury) await addToTreasury(masterId, fee.toString());
 
   return account;
 }
@@ -164,8 +170,9 @@ async function deposit(userId, copperAmount) {
   // VAULT_TIERS above). Infinity has no BigInt equivalent, so this check
   // stays a mixed BigInt/Number comparison (allowed by JS) rather than
   // trying to convert maxStorage itself to BigInt.
-  if (Number.isFinite(tier.maxStorage) && (currentBig + depositBig) > BigInt(Math.floor(tier.maxStorage))) {
-    return { success: false, reason: "Exceeds your vault's storage limit of **" + formatCopper(tier.maxStorage) + "**. Upgrade with **Cosa bank upgrade**." };
+  if (tier.maxStorage !== Infinity) {
+    const cap = BigInt(String(tier.maxStorage));
+    if (currentBig + depositBig > cap) return { success: false, reason: "Exceeds your vault's storage limit of **" + formatCopper(cap) + "**. Upgrade with **Cosa bank upgrade**." };
   }
   account.balance = (currentBig + depositBig).toString();
   await saveBankAccount(account);
@@ -232,7 +239,7 @@ async function deductFromBank(userId, amount) {
 function formatCopper(copper) {
   // Flat currency: everything is Cash now. No denominations.
   if (copper === Infinity) return "♾️ Unlimited";
-  return "💵 " + fmt(Math.floor(Number(copper) || 0)) + " Cash";
+  return "💵 " + fmt(toBigIntSafe(copper)) + " Cash";
 }
 
 // ── Daily Processing (called every 24h) ──────────────────────────────────────
@@ -304,7 +311,9 @@ async function resetBanksByTier(fromTierKey, toTierKey) {
   for (const account of data || []) {
     const idx = TIER_ORDER.indexOf(account.vault_tier);
     if (idx === -1 || idx < fromIdx) continue; // below the threshold, untouched
-    const cappedBalance = Math.min(account.balance, targetTierDef.maxStorage);
+    const current = toBigIntSafe(account.balance);
+    const cap = targetTierDef.maxStorage === Infinity ? null : BigInt(String(targetTierDef.maxStorage));
+    const cappedBalance = cap === null ? current.toString() : (current > cap ? cap.toString() : current.toString());
     const { error: updateError } = await supabase.from("banks").update({ vault_tier: toTierKey, balance: cappedBalance }).eq("user_id", account.user_id);
     if (updateError) { console.error("[BANK TIER RESET ROW]", updateError.message); continue; }
     affected++;

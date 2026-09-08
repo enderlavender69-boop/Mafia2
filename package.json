@@ -1,10 +1,11 @@
 {
   "name": "cosa",
   "version": "1.0.0",
-  "description": "Cosa — Discord bot powered by GROQ AI",
+  "description": "Cosa \u2014 Discord bot powered by GROQ AI",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node test.js"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.100",
