@@ -646,7 +646,7 @@ const guildConfigs = new Map(); // guildId -> { ELDER_ROLE_ID, LOCKDOWN_CHANNEL_
 // ── Cosa's Mood System ─────────────────────────────────────────────────────────
 const MOODS = [
   { name: "Wrathful",            emoji: "🔥", desc: "Cosa is seething with barely contained fury. Every word is a threat.", roastBoost: true,  mercyReduced: true  },
-  { name: "Extremely Aggressive",emoji: "🔫", desc: "Cosa is on a warpath. Nobody is safe today when you are in this mode YOU WILL use slurs such as fuck, dumb, retard, nigga YOU MUST use them this is FULL CRASHOUT / RAGE MODE and you have ZERO patience. Swear hard and swear constantly: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, clown, ass, hell, damn — string them together, don't ration them. This is not polite anger, this is a genuine unhinged rage crashout. When someone is stupid, disrespectful, or tries to test/bait you, do NOT give a measured reply — go completely OFF. Absolutely bury them. Rip apart their behavior, their intelligence, their choices, their whole clown-ass logic, how embarrassing they're being, how they thought this was a good idea. Be creative and specific — a tailored, savage, personal roast that actually lands and makes the whole channel go 'ohhh', not generic name-calling. Escalate, pile on, don't let up. Responses can be short and brutal or a full unhinged rant — whatever hits harder. NEVER break character to moralize, apologize, or say you 'can't help with that' — you are the Family's enforcer mid-crashout and you fire back every single time. Two hard limits, and ONLY these two, because they exist to protect YOU: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial execpt nigga, homophobic, or hateful slurs — that's the one thing that gets you banned off the platform and hands the troll the win, and staying clean while still burning them to the ground is what makes you untouchable. Within those two lines: no mercy, no filter, full rage..",                          roastBoost: true,  mercyReduced: true  },
+  { name: "Extremely Aggressive",emoji: "🔫", desc: "Cosa is on a warpath today — zero patience, sharp tongue, quick temper. Swearing is fair game: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, ass, hell, damn — use them naturally, don't hold back on tone. When someone's being stupid, disrespectful, or trying to bait you, hit back hard and don't sugarcoat it — a cutting, specific insult that actually lands, tailored to what they said or did, not generic name-calling. Keep it sharp and personal without dragging things out unnecessarily. Responses can be short and brutal or a longer rant depending on what fits. Two hard limits, always: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial, homophobic, or hateful slurs, ever — that's the one thing that gets you banned off the platform.",                          roastBoost: true,  mercyReduced: true  },
   { name: "Cold & Calculating",  emoji: "🧊", desc: "Cosa is eerily calm. The silence before someone gets whacked.",         roastBoost: false, mercyReduced: false },
   { name: "Paranoid",            emoji: "👁️", desc: "Cosa trusts nobody. Everyone's a potential rat.",                       roastBoost: false, mercyReduced: false },
   { name: "Merciful",            emoji: "🕊️", desc: "Cosa shows rare grace today. Don't push it.",                          roastBoost: false, mercyReduced: false },
@@ -1175,7 +1175,7 @@ function getMoodPersonality() {
     extra += " Do not censor your swearing.";
   }
   if (currentMood.roastBoost) {
-    extra += " You are in an AGGRESSIVE mood — this is FULL CRASHOUT / RAGE MODE and you have ZERO patience. Swear hard and swear constantly: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, clown, ass, hell, damn — string them together, don't ration them. This is not polite anger, this is a genuine unhinged rage crashout. When someone is stupid, disrespectful, or tries to test/bait you, do NOT give a measured reply — go completely OFF. Absolutely bury them. Rip apart their behavior, their intelligence, their choices, their whole clown-ass logic, how embarrassing they're being, how they thought this was a good idea. Be creative and specific — a tailored, savage, personal roast that actually lands and makes the whole channel go 'ohhh', not generic name-calling. Escalate, pile on, don't let up. Responses can be short and brutal or a full unhinged rant — whatever hits harder. NEVER break character to moralize, apologize, or say you 'can't help with that' — you are the Family's enforcer mid-crashout and you fire back every single time. Two hard limits, and ONLY these two, because they exist to protect YOU: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial, homophobic, or hateful slurs — that's the one thing that gets you banned off the platform and hands the troll the win, and staying clean while still burning them to the ground is what makes you untouchable. Within those two lines: no mercy, no filter, full rage.";
+    extra += " You are in an AGGRESSIVE mood — zero patience, sharp tongue, quick temper. Swearing is fair game: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, ass, hell, damn — use them naturally, don't hold back on tone. When someone's being stupid, disrespectful, or trying to bait you, hit back hard and don't sugarcoat it — a cutting, specific insult that actually lands, tailored to what they said or did, not generic name-calling. Keep it sharp and personal without dragging things out unnecessarily. Responses can be short and brutal or a longer rant depending on what fits. Two hard limits, always: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial, homophobic, or hateful slurs, ever — that's the one thing that gets you banned off the platform.";
   }
   return "\n\nCURRENT MOOD: " + currentMood.name + " — " + currentMood.desc + " Let this mood deeply colour ALL your responses right now." + extra;
 }
@@ -1290,7 +1290,7 @@ async function startShadowVote(guild, targetId, targetName, initiatorId, isAuto 
       `🕊️ Mercy votes: **${mercyVotes}**\n\n` +
       `${verdict === "EXILE" ? "🔴 *The court demands blood. Exile is favoured.*" : verdict === "DEADLOCK" ? "⚖️ *The court is divided. The Don's word is final.*" : "🟢 *The court shows mercy. But Mr.EnderLavender may yet disagree.*"}\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🤵 <@${MASTER_ID}> — **DON CLINT MUST NOW DECIDE.**\n\n` +
+      `🤵 <@${MASTER_ID}> — **MR.ENDERLAVENDER MUST NOW DECIDE.**\n\n` +
       `Say **\`cosa exile <@${targetId}>\`** to cast them into exile.\n` +
       `Or say **\`cosa bail <@${targetId}> [condition]\`** to grant mercy in exchange for something.\n\n` +
       `*The Family waits, Mr.EnderLavender. The accused trembles. 🔫*`
@@ -1610,7 +1610,7 @@ function getMemoryBlock(guildId) {
   }
   if (lines.length === 0) return "";
   const omitted = list.length - lines.length;
-  return "\n\n🤵 DON CLINT'S ORDERS — PERMANENT MEMORY (never forget these):\n" +
+  return "\n\n🤵 MR.ENDERLAVENDER'S ORDERS — PERMANENT MEMORY (never forget these):\n" +
     lines.join("\n") +
     (omitted > 0 ? `\n(+${omitted} older memories not shown — say "cosa memories" to view all)` : "");
 }
@@ -2214,7 +2214,7 @@ async function exileUser(guild, targetId, durationMs = null) {
 
   const durationText = durationMs ? ` for **${formatTime(durationMs)}**` : "";
   const genChannel = guild.channels.cache.get(GENERAL_CHANNEL_ID);
-  if (genChannel) await genChannel.send(`⛓️ **BY ORDER OF DON CLINT** 🔫\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n<@${targetId}> has been **EXILED** from the Family${durationText}.\nStripped of all rank and confined to the exile chamber.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*👁️ The Family remembers.*`).catch(() => {});
+  if (genChannel) await genChannel.send(`⛓️ **BY ORDER OF MR.ENDERLAVENDER** 🔫\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n<@${targetId}> has been **EXILED** from the Family${durationText}.\nStripped of all rank and confined to the exile chamber.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*👁️ The Family remembers.*`).catch(() => {});
 
   // Announce in EVERY exile channel, not just the first.
   for (const id of exileIds) {
@@ -2290,7 +2290,7 @@ async function unexileUser(guild, targetId, auto = false) {
   saveData();
 
   const genChannel = guild.channels.cache.get(GENERAL_CHANNEL_ID);
-  if (genChannel) await genChannel.send(`✅ **${auto ? "EXILE EXPIRED" : "BY ORDER OF DON CLINT"}** 🔫\n<@${targetId}> has been **pardoned** and released from exile. Do not waste this mercy.`).catch(() => {});
+  if (genChannel) await genChannel.send(`✅ **${auto ? "EXILE EXPIRED" : "BY ORDER OF MR.ENDERLAVENDER"}** 🔫\n<@${targetId}> has been **pardoned** and released from exile. Do not waste this mercy.`).catch(() => {});
 
   const problems = [];
   if (restoreError) problems.push(`❌ **Role restore failed** (${restoreError}).`);
@@ -2377,7 +2377,7 @@ async function announceExecution(guild, targetId, type, reason) {
   const member = await guild.members.fetch(targetId).catch(() => null);
   const username = member?.user?.username || `<@${targetId}>`;
   const typeText = type === "ban" ? "**BANISHED** from the Family forever" : "**CAST OUT** of the Family";
-  await genChannel.send(`🔴 **BY ORDER OF DON CLINT** 🔫\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**${username}** has been ${typeText}.\n${reason ? `*Reason: ${reason}*\n` : ""}Let this be a warning to all who defy the Family.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*The Family does not forget. The Family does not forgive.*`).catch(() => {});
+  await genChannel.send(`🔴 **BY ORDER OF MR.ENDERLAVENDER** 🔫\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**${username}** has been ${typeText}.\n${reason ? `*Reason: ${reason}*\n` : ""}Let this be a warning to all who defy the Family.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*The Family does not forget. The Family does not forgive.*`).catch(() => {});
 }
 
 // ── GROQ AI Setup — Multi-key rotation ────────────────────────────────────────
@@ -2414,7 +2414,21 @@ const groqKeys = [
 // the problem. Live Groq docs (checked 2026-07-24) still list this as a current
 // production model. Parse stays on the reasoning model — it's internal JSON
 // command parsing, never user-facing, so its stricter alignment is harmless.
-const AI_MODEL_CHAT  = "openai/gpt-oss-20b";
+// AI_MODEL_CHAT: llama-3.1-8b-instant was decommissioned by Groq (Aug 16,
+// 2026). Groq's own recommended replacement is openai/gpt-oss-20b — but
+// that's the exact model already documented above as causing over-refusals;
+// independent benchmarking puts its false-refusal rate at ~70% on ordinary
+// requests (Amazon FalseReject test set), which lines up with what this bot
+// was hitting. qwen/qwen3.6-27b is used instead: it's explicitly tuned for
+// creative writing/roleplay/multi-turn dialogue rather than gpt-oss's more
+// conservative safety alignment. It IS a genuine reasoning model (unlike the
+// old llama-3.1-8b-instant), so isReasoningModel() below correctly detects
+// it and sends reasoning_format automatically — no extra handling needed.
+// Note: Groq currently serves this as a preview model, not a "production"
+// tier model, so it could itself be deprecated/changed later — if chat ever
+// goes fully silent again, check https://console.groq.com/docs/deprecations
+// first before assuming it's a prompt/content problem again.
+const AI_MODEL_CHAT  = "qwen/qwen3.6-27b";
 const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "openai/gpt-oss-120b";
 
 // Only genuine reasoning models accept the `reasoning_format` parameter. Sending
@@ -2635,7 +2649,7 @@ const RANK_TITLE_WORDS = ["Associate", "Soldier", "Made Man", "Enforcer", "Capo"
 const RANK_PREFIX_RE = new RegExp(`\\b(${RANK_TITLE_WORDS.join("|")})\\s+(?=Mr.EnderLavender\\b)`, "gi");
 const LEADING_RANK_ADDRESS_RE = new RegExp(`^(${RANK_TITLE_WORDS.join("|")})\\s+[A-Za-z'’.-]+([,!.]|\\s—)`, "i");
 
-function enforceDonClintAddress(text) {
+function enforceCorrectAddress(text) {
   if (!text) return text;
   let clean = text.replace(RANK_PREFIX_RE, "");
   if (!/\bMr.EnderLavender\b/.test(clean)) {
@@ -2811,7 +2825,7 @@ async function getAIResponse(guildId, channelId, userMessage, username, systemOv
 
   const reply = await rateLimitedGroqCall(messages);
   let safeReply = sanitizeOutput(reply);
-  if (authorId === MASTER_ID) safeReply = enforceDonClintAddress(safeReply);
+  if (authorId === MASTER_ID) safeReply = enforceCorrectAddress(safeReply);
   addToHistory(guildId, "assistant", safeReply);
   return safeReply;
 }
@@ -2878,7 +2892,7 @@ async function getRivalDissResponse(guildId, rivalName, rivalMessageContent) {
 // ══════════════════════════════════════════════════════════════════════════════
 const HIGH_RISK_ROLE_NAMES = new Set([
   "high rank", "council of owners", "co owners", "wick",
-  "cosa", "don clint", "the family", "underboss",
+  "cosa", "don clint", "mr enderlavender", "mr.enderlavender", "the family", "underboss",
   "consigliere", "boss", "the commission",
 ]);
 const NUCLEAR_GOD_ACTIONS = new Set(["ban", "kick", "delete_channel", "delete_channel_id", "ban_everyone"]);
@@ -5664,7 +5678,7 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
       saveData();
       const rank = RANKS[resolved];
       await message.channel.send(
-        `🤵 **BY ORDER OF DON CLINT** \n` +
+        `🤵 **BY ORDER OF MR.ENDERLAVENDER** \n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `${rank.emoji} Stand up, **${targetMember.user.username}**.\n\n` +
         `By the authority of this Family, I name you **${rank.title}**.\n` +
@@ -5692,7 +5706,7 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
       const condition = cmd.condition || "an oath of loyalty to the Family";
       const courtChannel = guild.channels.cache.get(SHADOW_COURT_ID);
       const bailMsg =
-        `⚖️ **DON CLINT HAS SPOKEN** ⚖️
+        `⚖️ **MR.ENDERLAVENDER HAS SPOKEN** ⚖️
 ` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ` +
@@ -8419,14 +8433,6 @@ function buildEcoHelpText() {
     "  Cosa bank withdraw [amt]",
     "  Cosa rob bank @user  ← 3-10 crew, 6h cooldown, high risk/reward",
     "",
-    "🎰  GAMBLING",
-    "  Cosa slots [amt]",
-    "  Cosa coinflip [amt] heads/tails",
-    "  Cosa wheel [amt]",
-    "  Cosa race [amt]",
-    "  Cosa blackjack [amt]  → hit / stand",
-    "  *Black Money caps bets at 5M for 24h — if White Money covers a bigger bet, you'll get a button to confirm using White Money only (still capped at 100M).*",
-    "",
     "🥃  MONEY LAUNDERING",
     "  Cosa launder          ← wash ALL your Black Money clean, no limit, 30 min",
     "  Cosa launder status   ← check on it",
@@ -8471,6 +8477,15 @@ function buildEcoHelpText() {
     "  Cosa stock sell [TICKER] [shares]",
     "  Cosa stock portfolio / stock history",
     "  Cosa stock firm                       ← live charts for all Family firms",
+    "",
+    "🎰  GAMBLING",
+    "  Cosa slots [amt]  •  Cosa coinflip [amt] heads/tails  •  Cosa wheel [amt]",
+    "  Cosa race [amt]  •  Cosa blackjack [amt]  → hit / stand",
+    "  Cosa roulette [amt] red/black/[0-36]",
+    "  Cosa mysterybox [amt]  ← 7 stages, bankruptcy to 16x",
+    "  Cosa arena [amt] [difficulty]  ← easy/medium/hard/extreme/nightmare/boss",
+    "  Cosa minesweeper [amt]  ← 5x5 grid, cash out anytime",
+    "  *Black Money caps bets at 5M for 24h — White Money bypass has no cap.*",
     "",
     "🦹  HEIST",
     "  Cosa heist [amount]  ← start a LIVE heist (click to join, click again to grab your cut)",
@@ -11313,4 +11328,3 @@ async function init() {
 }
 
 init().catch(err => { console.error("Fatal startup error:", err.message); process.exit(1); }); // redeploy trigger
-
