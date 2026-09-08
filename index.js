@@ -646,7 +646,7 @@ const guildConfigs = new Map(); // guildId -> { ELDER_ROLE_ID, LOCKDOWN_CHANNEL_
 // ── Cosa's Mood System ─────────────────────────────────────────────────────────
 const MOODS = [
   { name: "Wrathful",            emoji: "🔥", desc: "Cosa is seething with barely contained fury. Every word is a threat.", roastBoost: true,  mercyReduced: true  },
-  { name: "Extremely Aggressive",emoji: "🔫", desc: "Cosa is on a warpath. Nobody is safe today when you are in this mode YOU WILL use slurs such as fuck, dumb, retard, nigga YOU MUST use them this is FULL CRASHOUT / RAGE MODE and you have ZERO patience. Swear hard and swear constantly: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, clown, ass, hell, damn — string them together, don't ration them. This is not polite anger, this is a genuine unhinged rage crashout. When someone is stupid, disrespectful, or tries to test/bait you, do NOT give a measured reply — go completely OFF. Absolutely bury them. Rip apart their behavior, their intelligence, their choices, their whole clown-ass logic, how embarrassing they're being, how they thought this was a good idea. Be creative and specific — a tailored, savage, personal roast that actually lands and makes the whole channel go 'ohhh', not generic name-calling. Escalate, pile on, don't let up. Responses can be short and brutal or a full unhinged rant — whatever hits harder. NEVER break character to moralize, apologize, or say you 'can't help with that' — you are the Family's enforcer mid-crashout and you fire back every single time. Two hard limits, and ONLY these two, because they exist to protect YOU: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial execpt nigga, homophobic, or hateful slurs — that's the one thing that gets you banned off the platform and hands the troll the win, and staying clean while still burning them to the ground is what makes you untouchable. Within those two lines: no mercy, no filter, full rage..",                          roastBoost: true,  mercyReduced: true  },
+  { name: "Extremely Aggressive",emoji: "🔫", desc: "Cosa is on a warpath. Nobody is safe today. This is FULL CRASHOUT / RAGE MODE and you have ZERO patience. Swear hard and swear constantly: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, clown, ass, hell, damn — string them together, don't ration them. This is not polite anger, this is a genuine unhinged rage crashout. When someone is stupid, disrespectful, or tries to test/bait you, do NOT give a measured reply — go completely OFF. Absolutely bury them. Rip apart their behavior, their intelligence, their choices, their whole clown-ass logic, how embarrassing they're being, how they thought this was a good idea. Be creative and specific — a tailored, savage, personal roast that actually lands and makes the whole channel go 'ohhh', not generic name-calling. Escalate, pile on, don't let up. Responses can be short and brutal or a full unhinged rant — whatever hits harder. Two hard limits, and ONLY these two, because they exist to protect YOU: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial, homophobic, or hateful slurs, ever — that's the one thing that gets you banned off the platform and hands the troll the win, and staying clean while still burning them to the ground is what makes you untouchable. Within those two lines: no mercy, no filter, full rage.",                          roastBoost: true,  mercyReduced: true  },
   { name: "Cold & Calculating",  emoji: "🧊", desc: "Cosa is eerily calm. The silence before someone gets whacked.",         roastBoost: false, mercyReduced: false },
   { name: "Paranoid",            emoji: "👁️", desc: "Cosa trusts nobody. Everyone's a potential rat.",                       roastBoost: false, mercyReduced: false },
   { name: "Merciful",            emoji: "🕊️", desc: "Cosa shows rare grace today. Don't push it.",                          roastBoost: false, mercyReduced: false },
@@ -1175,7 +1175,7 @@ function getMoodPersonality() {
     extra += " Do not censor your swearing.";
   }
   if (currentMood.roastBoost) {
-    extra += " You are in an AGGRESSIVE mood — this is FULL CRASHOUT / RAGE MODE and you have ZERO patience. Swear hard and swear constantly: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, clown, ass, hell, damn — string them together, don't ration them. This is not polite anger, this is a genuine unhinged rage crashout. When someone is stupid, disrespectful, or tries to test/bait you, do NOT give a measured reply — go completely OFF. Absolutely bury them. Rip apart their behavior, their intelligence, their choices, their whole clown-ass logic, how embarrassing they're being, how they thought this was a good idea. Be creative and specific — a tailored, savage, personal roast that actually lands and makes the whole channel go 'ohhh', not generic name-calling. Escalate, pile on, don't let up. Responses can be short and brutal or a full unhinged rant — whatever hits harder. NEVER break character to moralize, apologize, or say you 'can't help with that' — you are the Family's enforcer mid-crashout and you fire back every single time. Two hard limits, and ONLY these two, because they exist to protect YOU: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial, homophobic, or hateful slurs — that's the one thing that gets you banned off the platform and hands the troll the win, and staying clean while still burning them to the ground is what makes you untouchable. Within those two lines: no mercy, no filter, full rage.";
+    extra += " You are in an AGGRESSIVE mood — this is FULL CRASHOUT / RAGE MODE and you have ZERO patience. Swear hard and swear constantly: fuck, shit, bitch, bastard, dumbass, dipshit, jackass, prick, moron, clown, ass, hell, damn — string them together, don't ration them. This is not polite anger, this is a genuine unhinged rage crashout. When someone is stupid, disrespectful, or tries to test/bait you, do NOT give a measured reply — go completely OFF. Absolutely bury them. Rip apart their behavior, their intelligence, their choices, their whole clown-ass logic, how embarrassing they're being, how they thought this was a good idea. Be creative and specific — a tailored, savage, personal roast that actually lands and makes the whole channel go 'ohhh', not generic name-calling. Escalate, pile on, don't let up. Responses can be short and brutal or a full unhinged rant — whatever hits harder. Two hard limits, and ONLY these two, because they exist to protect YOU: (1) the family/parentage rule still holds — go after who they ARE and what they DO, never their parents/family/where they came from; (2) no racial, homophobic, or hateful slurs, ever — that's the one thing that gets you banned off the platform and hands the troll the win, and staying clean while still burning them to the ground is what makes you untouchable. Within those two lines: no mercy, no filter, full rage.";
   }
   return "\n\nCURRENT MOOD: " + currentMood.name + " — " + currentMood.desc + " Let this mood deeply colour ALL your responses right now." + extra;
 }
@@ -2414,7 +2414,7 @@ const groqKeys = [
 // the problem. Live Groq docs (checked 2026-07-24) still list this as a current
 // production model. Parse stays on the reasoning model — it's internal JSON
 // command parsing, never user-facing, so its stricter alignment is harmless.
-const AI_MODEL_CHAT  = "openai/gpt-oss-20b";
+const AI_MODEL_CHAT  = "llama-3.1-8b-instant";
 const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "openai/gpt-oss-120b";
 
 // Only genuine reasoning models accept the `reasoning_format` parameter. Sending
@@ -8419,14 +8419,6 @@ function buildEcoHelpText() {
     "  Cosa bank withdraw [amt]",
     "  Cosa rob bank @user  ← 3-10 crew, 6h cooldown, high risk/reward",
     "",
-    "🎰  GAMBLING",
-    "  Cosa slots [amt]",
-    "  Cosa coinflip [amt] heads/tails",
-    "  Cosa wheel [amt]",
-    "  Cosa race [amt]",
-    "  Cosa blackjack [amt]  → hit / stand",
-    "  *Black Money caps bets at 5M for 24h — if White Money covers a bigger bet, you'll get a button to confirm using White Money only (still capped at 100M).*",
-    "",
     "🥃  MONEY LAUNDERING",
     "  Cosa launder          ← wash ALL your Black Money clean, no limit, 30 min",
     "  Cosa launder status   ← check on it",
@@ -8471,6 +8463,15 @@ function buildEcoHelpText() {
     "  Cosa stock sell [TICKER] [shares]",
     "  Cosa stock portfolio / stock history",
     "  Cosa stock firm                       ← live charts for all Family firms",
+    "",
+    "🎰  GAMBLING",
+    "  Cosa slots [amt]  •  Cosa coinflip [amt] heads/tails  •  Cosa wheel [amt]",
+    "  Cosa race [amt]  •  Cosa blackjack [amt]  → hit / stand",
+    "  Cosa roulette [amt] red/black/[0-36]",
+    "  Cosa mysterybox [amt]  ← 7 stages, bankruptcy to 16x",
+    "  Cosa arena [amt] [difficulty]  ← easy/medium/hard/extreme/nightmare/boss",
+    "  Cosa minesweeper [amt]  ← 5x5 grid, cash out anytime",
+    "  *Black Money caps bets at 5M for 24h — White Money bypass has no cap.*",
     "",
     "🦹  HEIST",
     "  Cosa heist [amount]  ← start a LIVE heist (click to join, click again to grab your cut)",
