@@ -2390,12 +2390,11 @@ const groqKeys = [
 ].filter(Boolean);
 
 // ── Model selection ───────────────────────────────────────────────────────────
-// Qwen3 27B on Groq — specifically tuned for roleplay/creative dialogue with
-// the most freedom of speech. GPT-OSS models have a documented ~70%
-// false-refusal rate on ordinary requests. Qwen accepts "default" for
-// reasoning_effort, not "low/medium/high" like GPT-OSS.
-const AI_MODEL_CHAT  = process.env.GROQ_MODEL_CHAT || "qwen/qwen3.6-27b";
-const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "qwen/qwen3.6-27b";
+// GPT-OSS 120B on Groq — OpenAI's open-weight reasoning model, best non-Alibaba
+// option for roleplay/creative dialogue. Accepts "low/medium/high" reasoning_effort.
+// With cleaned mood instructions (no racial slur demands), false-refusal rate is minimal.
+const AI_MODEL_CHAT  = process.env.GROQ_MODEL_CHAT || "openai/gpt-oss-120b";
+const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "openai/gpt-oss-120b";
 
 // Only genuine reasoning models accept the `reasoning_format` parameter. Sending
 // it to a non-reasoning model (llama-3.3-70b-versatile, llama-3.1-8b-instant)
