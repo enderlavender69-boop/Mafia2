@@ -1244,7 +1244,13 @@ function getMarketBoardData() {
 
   for (const [ticker, stock] of Object.entries(STOCKS)) {
     const candles = stockCandles[ticker] || [];
-    const price   = stockPrices[ticker] || stock.basePrice * 100;
+    let price   = stockPrices[ticker];
+
+    // Treat price <= 1 as uninitialized (can happen if tickStockMarket ran before initStockPrices)
+    if (!price || price <= 1) {
+      price = stock.penny ? stock.basePrice : stock.basePrice * 100;
+      stockPrices[ticker] = price; // backfill
+    }
 
     // Use first candle open vs current close for accurate % change
     const visibleCandles = candles.slice(-20);
@@ -2531,6 +2537,7 @@ module.exports = {
   MIN_BANK_CREW, MAX_BANK_CREW, BANK_ROB_COOLDOWN_MS,
   // Stocks
   STOCKS, stockPrices,
+  initStockPrices,
   get stockCandles() { return stockCandles; },
   stockPortfolios,
   buyStock, sellStock, getMarketBoard, getMarketBoardData, getPortfolio, getStockHistory,
