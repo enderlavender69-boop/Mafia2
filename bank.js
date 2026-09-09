@@ -252,8 +252,12 @@ async function runDailyBankProcessing(masterId, addToTreasury) {
   if (!data) return;
   let processed = 0;
   for (const account of data) {
-    await processBank(account, masterId, addToTreasury);
-    processed++;
+    try {
+      await processBank(account, masterId, addToTreasury);
+      processed++;
+    } catch (e) {
+      console.error("[BANK DAILY] Failed for " + account.user_id + ":", e.message);
+    }
   }
   console.log("[BANK] Daily processing complete — " + processed + " accounts");
 }
