@@ -2390,9 +2390,9 @@ const groqKeys = [
 ].filter(Boolean);
 
 // ── Model selection ───────────────────────────────────────────────────────────
-// Qwen3 6B (27B params) on Groq — specifically tuned for roleplay/creative
-// dialogue with the most freedom of speech. GPT-OSS models have a documented
-// ~70% false-refusal rate on ordinary requests. Qwen accepts "default" for
+// Qwen3 27B on Groq — specifically tuned for roleplay/creative dialogue with
+// the most freedom of speech. GPT-OSS models have a documented ~70%
+// false-refusal rate on ordinary requests. Qwen accepts "default" for
 // reasoning_effort, not "low/medium/high" like GPT-OSS.
 const AI_MODEL_CHAT  = process.env.GROQ_MODEL_CHAT || "qwen/qwen3.6-27b";
 const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "qwen/qwen3.6-27b";
@@ -7818,7 +7818,7 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
       const bet = eco.parseBet(cmd.amount, cmd.tier);
       if (!bet) return "Invalid bet.";
       if (!cmd.difficulty || !casino.ARENA_TIERS[cmd.difficulty]) {
-        return "Pick a difficulty: easy, medium, hard, extreme, nightmare, or boss. Example: **Cosa arena 100 hard**";
+        return "Pick a difficulty: **easy, medium, hard, extreme, nightmare, boss**. Example: **Cosa arena 100 hard**";
       }
       const cooldownMsgAR = await checkGambleCooldown(message.author.id);
       if (cooldownMsgAR) return cooldownMsgAR;
@@ -7959,6 +7959,8 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
     // ── Stocks ───────────────────────────────────────────────────────────────────
     case "exchange": {
       try {
+        // Ensure stock prices are initialized (safeguard if loadStockPrices didn't run)
+        features.initStockPrices();
         const { candleData, stockInfo, marketOpen } = features.getMarketBoardData();
         const imgBuffer = stockChart.renderPanel(
           ["TITAN", "OMERTA", "CROWN"], candleData, stockInfo,
@@ -8490,7 +8492,7 @@ function buildEcoHelpText() {
     "  Cosa race [amt]",
     "  Cosa blackjack [amt]  → hit / stand",
     "  Cosa roulette [amt] red/black/odd/even/low/high/1st-dozen/2nd-dozen/3rd-dozen/0-36",
-    "  Cosa mystery box [amt] | Cosa arena [amt] [difficulty] | Cosa mines [amt]",
+    "  Cosa mystery box [amt] | Cosa arena [amt] [easy/medium/hard/extreme/nightmare/boss] | Cosa mines [amt]",
     "  *Black Money caps bets at 5M for 24h — if White Money covers a bigger bet, you'll get a button to confirm using White Money only (still capped at 100M).*",
     "",
     "🥃  MONEY LAUNDERING",

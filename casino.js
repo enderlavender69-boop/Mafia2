@@ -73,16 +73,46 @@ const ARENA_TIERS = {
   nightmare: { label: "Nightmare", emoji: "🟣", winChance: 0.075, multiplier: 16 },
   boss:      { label: "Boss",      emoji: "⚫", winChance: 0.02,  multiplier: 32 },
 };
-const ARENA_ENEMY_NAMES = [
+
+// Normal enemies (80% chance) + Limbus Company references (20% chance)
+const ARENA_ENEMY_NAMES_NORMAL = [
   "a Barzini enforcer", "a rival capo", "a rogue hitman", "a crooked cop",
   "a debt collector", "a masked assassin", "a cartel lieutenant",
   "a disgraced consigliere", "a street thug", "a bounty hunter",
 ];
 
+const ARENA_ENEMY_NAMES_LIMBUS = [
+  // Backstreets / Low-tier
+  "a Backstreets thug", "a Fixer rookie", "a Sweeper", "a Syndicate grunt",
+  "a rogue Claw mercenary", "a Tousle-headed punk", "a down-on-their-luck Fixer",
+  // Mid-tier
+  "a Grade 9 Fixer", "a Liu Association enforcer", "a Shi Association agent",
+  "a W Corp. Cleaner", "a R Corp. Rabbit", "a T Corp. Timekeeper",
+  "a K Corp. Knight", "a N Corp. Inquisitor", "a V Corp. Vampire",
+  // High-tier / Distortions
+  "a Distorted Fixer", "a Color Fixer — Red", "a Color Fixer — Black",
+  "a Blue Reverb Trumpeter", "a Purple Tear", "a Black Silence",
+  "an Abnormality: Laetitia", "an Abnormality: Queen of Hearts",
+  "an Abnormality: Melting Love", "an Abnormality: Nothing There",
+  // Boss tier
+  "The Blue Reverb: Philip", "The Black Silence: Kromer",
+  "The Red Mist: Roland", "The Purple Tear: Angela",
+  "a Claw of the Head", "an Arbiter: Gebura", "an Arbiter: Binah",
+  "the Head itself...",
+];
+
+function getRandomArenaEnemy() {
+  // 20% chance for Limbus reference, 80% normal
+  if (Math.random() < 0.20) {
+    return ARENA_ENEMY_NAMES_LIMBUS[Math.floor(Math.random() * ARENA_ENEMY_NAMES_LIMBUS.length)];
+  }
+  return ARENA_ENEMY_NAMES_NORMAL[Math.floor(Math.random() * ARENA_ENEMY_NAMES_NORMAL.length)];
+}
+
 function playArena(tierKey) {
   const tier = ARENA_TIERS[tierKey];
   if (!tier) return null;
-  const enemy = ARENA_ENEMY_NAMES[Math.floor(Math.random() * ARENA_ENEMY_NAMES.length)];
+  const enemy = getRandomArenaEnemy();
   const won = Math.random() < tier.winChance;
   return { tier: tierKey, tierData: tier, enemy, won, multiplier: won ? tier.multiplier : 0 };
 }
