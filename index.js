@@ -2432,8 +2432,8 @@ const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "openai/gpt-oss-120b";
 
 // Fallback models for when primary hits Groq daily token limit (TPD). Non-Alibaba,
 // strong for roleplay/creative dialogue. Switched to automatically on TPD.
-const AI_FALLBACK_CHAT  = "meta-llama/llama-4-maverick-17b-128e-instruct";
-const AI_FALLBACK_PARSE = "meta-llama/llama-4-maverick-17b-128e-instruct";
+const AI_FALLBACK_CHAT  = "openai/gpt-oss-20b";
+const AI_FALLBACK_PARSE = "openai/gpt-oss-20b";
 
 // Only genuine reasoning models accept the `reasoning_format` parameter. Sending
 // it to a non-reasoning model (llama-3.3-70b-versatile, llama-3.1-8b-instant)
