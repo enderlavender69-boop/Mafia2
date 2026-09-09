@@ -5592,7 +5592,7 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
   }
 
   // Route eco commands to public handler
-  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","roulette","mysterybox","arena","minesweeper","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","elite_market","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place"];
+  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","roulette","mysterybox","arena","minesweeper","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","exchange","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place"];
   if (ecoActions.includes(action)) {
     return await executePublicCommand(message, cmd, channelId);
   }
@@ -7957,14 +7957,14 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
     }
 
     // ── Stocks ───────────────────────────────────────────────────────────────────
-    case "elite_market": {
+    case "exchange": {
       const elite = ["TITAN", "OMERTA", "CROWN"];
       const lines = elite.map(t => {
         const info = features.STOCKS[t];
         const price = features.stockPrices[t] || info.basePrice * 100;
         return `💎 **${t}** — ${info.name} | **${eco.fmt(price)} Cash/share** | volatility ${(info.volatility * 100).toFixed(1)}%`;
       });
-      return "💎 **FAMILY ELITE EXCHANGE**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + lines.join("\n") + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Whale-value shares. Buy with **Cosa stock buy [TICKER] [shares]**.*";
+      return "💎 **FAMILY EXCHANGE**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + lines.join("\n") + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Whale-value shares. Buy with **Cosa stock buy [TICKER] [shares]**.*";
     }
     case "stocks":
     case "market_panel": {
@@ -8520,7 +8520,7 @@ function buildEcoHelpText() {
     "  Cosa stock sell [TICKER] [shares]",
     "  Cosa stock portfolio / stock history",
     "  Cosa stock firm                       ← live charts for all Family firms",
-    "  Cosa elite market                     ← TITAN / OMERTA / CROWN (whale-value shares)",
+    "  Cosa exchange                       ← TITAN / OMERTA / CROWN (whale-value shares)",
     "",
     "🦹  HEIST",
     "  Cosa heist [amount]  ← start a LIVE heist (click to join, click again to grab your cut)",
