@@ -65,17 +65,23 @@ function playMysteryBox() {
 
 // ── Arena ─────────────────────────────────────────────────────────────────────
 // Difficulty tiers exactly as specified: higher risk, higher multiplier.
-// Limbus Company themed — the deeper you go, the more distorted the fight.
 const ARENA_TIERS = {
-  easy:       { label: "Backstreets",      emoji: "🟢", winChance: 0.90,  multiplier: 1.2 },
-  medium:     { label: "Nest",             emoji: "🟡", winChance: 0.60,  multiplier: 2 },
-  hard:       { label: "L Corp. Branch",   emoji: "🟠", winChance: 0.35,  multiplier: 4 },
-  extreme:    { label: "Lobotomy Corp.",   emoji: "🔴", winChance: 0.15,  multiplier: 8 },
-  nightmare:  { label: "The Library",      emoji: "🟣", winChance: 0.075, multiplier: 16 },
-  boss:       { label: "The Head",         emoji: "⚫", winChance: 0.02,  multiplier: 32 },
+  easy:      { label: "Easy",      emoji: "🟢", winChance: 0.90,  multiplier: 1.2 },
+  medium:    { label: "Medium",    emoji: "🟡", winChance: 0.60,  multiplier: 2 },
+  hard:      { label: "Hard",      emoji: "🟠", winChance: 0.35,  multiplier: 4 },
+  extreme:   { label: "Extreme",   emoji: "🔴", winChance: 0.15,  multiplier: 8 },
+  nightmare: { label: "Nightmare", emoji: "🟣", winChance: 0.075, multiplier: 16 },
+  boss:      { label: "Boss",      emoji: "⚫", winChance: 0.02,  multiplier: 32 },
 };
 
-const ARENA_ENEMY_NAMES = [
+// Normal enemies (80% chance) + Limbus Company references (20% chance)
+const ARENA_ENEMY_NAMES_NORMAL = [
+  "a Barzini enforcer", "a rival capo", "a rogue hitman", "a crooked cop",
+  "a debt collector", "a masked assassin", "a cartel lieutenant",
+  "a disgraced consigliere", "a street thug", "a bounty hunter",
+];
+
+const ARENA_ENEMY_NAMES_LIMBUS = [
   // Backstreets / Low-tier
   "a Backstreets thug", "a Fixer rookie", "a Sweeper", "a Syndicate grunt",
   "a rogue Claw mercenary", "a Tousle-headed punk", "a down-on-their-luck Fixer",
@@ -95,10 +101,18 @@ const ARENA_ENEMY_NAMES = [
   "the Head itself...",
 ];
 
+function getRandomArenaEnemy() {
+  // 20% chance for Limbus reference, 80% normal
+  if (Math.random() < 0.20) {
+    return ARENA_ENEMY_NAMES_LIMBUS[Math.floor(Math.random() * ARENA_ENEMY_NAMES_LIMBUS.length)];
+  }
+  return ARENA_ENEMY_NAMES_NORMAL[Math.floor(Math.random() * ARENA_ENEMY_NAMES_NORMAL.length)];
+}
+
 function playArena(tierKey) {
   const tier = ARENA_TIERS[tierKey];
   if (!tier) return null;
-  const enemy = ARENA_ENEMY_NAMES[Math.floor(Math.random() * ARENA_ENEMY_NAMES.length)];
+  const enemy = getRandomArenaEnemy();
   const won = Math.random() < tier.winChance;
   return { tier: tierKey, tierData: tier, enemy, won, multiplier: won ? tier.multiplier : 0 };
 }

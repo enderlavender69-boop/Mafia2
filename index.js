@@ -4908,7 +4908,7 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+arena\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+arena/i, "").trim();
     const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
-    const tierMatch = cleanT.match(/\b(backstreets|nest|lcorp|lobotomy|library|head)\b/i);
+    const tierMatch = cleanT.match(/\b(easy|medium|hard|extreme|nightmare|boss)\b/i);
     return { action: "arena", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), difficulty: tierMatch?.[1]?.toLowerCase() || null };
   }
   if (/\bcosa\s+mines(?:weeper)?\b/.test(lower)) {
@@ -5290,7 +5290,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+arena\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+arena/i, "").trim();
     const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
-    const tierMatch = cleanT.match(/\b(backstreets|nest|lcorp|lobotomy|library|head)\b/i);
+    const tierMatch = cleanT.match(/\b(easy|medium|hard|extreme|nightmare|boss)\b/i);
     return { action: "arena", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), difficulty: tierMatch?.[1]?.toLowerCase() || null };
   }
   if (/\bcosa\s+mines(?:weeper)?\b/.test(lower)) {
@@ -7818,7 +7818,7 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
       const bet = eco.parseBet(cmd.amount, cmd.tier);
       if (!bet) return "Invalid bet.";
       if (!cmd.difficulty || !casino.ARENA_TIERS[cmd.difficulty]) {
-        return "Pick a difficulty: **backstreets, nest, lcorp, lobotomy, library, head**. Example: **Cosa arena 100 nest**";
+        return "Pick a difficulty: **easy, medium, hard, extreme, nightmare, boss**. Example: **Cosa arena 100 hard**";
       }
       const cooldownMsgAR = await checkGambleCooldown(message.author.id);
       if (cooldownMsgAR) return cooldownMsgAR;
@@ -8492,7 +8492,7 @@ function buildEcoHelpText() {
     "  Cosa race [amt]",
     "  Cosa blackjack [amt]  → hit / stand",
     "  Cosa roulette [amt] red/black/odd/even/low/high/1st-dozen/2nd-dozen/3rd-dozen/0-36",
-    "  Cosa mystery box [amt] | Cosa arena [amt] [backstreets/nest/lcorp/lobotomy/library/head] | Cosa mines [amt]",
+    "  Cosa mystery box [amt] | Cosa arena [amt] [easy/medium/hard/extreme/nightmare/boss] | Cosa mines [amt]",
     "  *Black Money caps bets at 5M for 24h — if White Money covers a bigger bet, you'll get a button to confirm using White Money only (still capped at 100M).*",
     "",
     "🥃  MONEY LAUNDERING",
