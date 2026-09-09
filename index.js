@@ -2394,8 +2394,8 @@ const groqKeys = [
 // dialogue with the most freedom of speech. GPT-OSS models have a documented
 // ~70% false-refusal rate on ordinary requests. Qwen accepts "default" for
 // reasoning_effort, not "low/medium/high" like GPT-OSS.
-const AI_MODEL_CHAT  = process.env.GROQ_MODEL_CHAT || "qwen/qwen3-32b";
-const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "qwen/qwen3-32b";
+const AI_MODEL_CHAT  = process.env.GROQ_MODEL_CHAT || "qwen/qwen3.6-27b";
+const AI_MODEL_PARSE = process.env.GROQ_MODEL_PARSE || "qwen/qwen3.6-27b";
 
 // Only genuine reasoning models accept the `reasoning_format` parameter. Sending
 // it to a non-reasoning model (llama-3.3-70b-versatile, llama-3.1-8b-instant)
@@ -7958,13 +7958,30 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
 
     // ── Stocks ───────────────────────────────────────────────────────────────────
     case "exchange": {
-      const elite = ["TITAN", "OMERTA", "CROWN"];
-      const lines = elite.map(t => {
-        const info = features.STOCKS[t];
-        const price = features.stockPrices[t] || info.basePrice * 100;
-        return `💎 **${t}** — ${info.name} | **${eco.fmt(price)} Cash/share** | volatility ${(info.volatility * 100).toFixed(1)}%`;
-      });
-      return "💎 **FAMILY EXCHANGE**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + lines.join("\n") + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Whale-value shares. Buy with **Cosa stock buy [TICKER] [shares]**.*";
+      try {
+        const { candleData, stockInfo, marketOpen } = features.getMarketBoardData();
+        const imgBuffer = stockChart.renderPanel(
+          ["TITAN", "OMERTA", "CROWN"], candleData, stockInfo,
+          "💎  FAMILY EXCHANGE",
+          "Titan Holdings  •  Omerta Industries  •  Crown Consortium  |  🐋 Whale-value shares",
+          marketOpen
+        );
+        const attachment = new AttachmentBuilder(imgBuffer, { name: "exchange.png" });
+        await message.channel.send({
+          content: `💎 **FAMILY EXCHANGE** — Whale-value shares for serious players.\n*Cosa stock buy TITAN/OMERTA/CROWN [shares]*`,
+          files: [attachment],
+        }).catch(() => {});
+        return null;
+      } catch (e) {
+        console.error("[EXCHANGE CHART]", e.message);
+        const elite = ["TITAN", "OMERTA", "CROWN"];
+        const lines = elite.map(t => {
+          const info = features.STOCKS[t];
+          const price = features.stockPrices[t] || info.basePrice * 100;
+          return `💎 **${t}** — ${info.name} | **${eco.fmt(price)} Cash/share** | volatility ${(info.volatility * 100).toFixed(1)}%`;
+        });
+        return "💎 **FAMILY EXCHANGE**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + lines.join("\n") + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Whale-value shares. Buy with **Cosa stock buy [TICKER] [shares]**.*";
+      }
     }
     case "stocks":
     case "market_panel": {
