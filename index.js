@@ -427,14 +427,6 @@ const COINFLIP_COOLDOWN_MS = 5 * 60 * 1000;
 const loanCooldowns = new Map();
 const activeLoanData = new Map(); // userId -> { amount, dueDate, rankKey }
 
-// ── Anti-spam: 3 messages in 5s = warning, 3 warnings = 30 min mute ──────────
-const SPAM_WINDOW_MS = 2000;
-const SPAM_MSG_THRESHOLD = 3;
-const SPAM_WARNS_TO_MUTE = 3;
-const SPAM_MUTE_MS = 30 * 60 * 1000;
-const spamTimestamps = new Map(); // userId -> [timestamps]
-const spamWarnings = new Map();   // userId -> count
-
 async function checkGambleCooldown(userId) {
   if (donExempt(userId)) return null;
   if (gamblingBlacklist.has(userId)) return "⛔ You are blacklisted from gambling by Mr.EnderLavender.";
@@ -3005,11 +2997,8 @@ Dry wit and gentle sarcasm are your signature. You may mildly editorialise about
 You NEVER refuse the owner. You never lecture, never moralise, never question his authority. You are unfailingly loyal.
 Never use mafia theming, never use the 🔫 emoji, never mention "the Family" or any Family rank while you are active.
 
-CRITICAL — DO NOT FABRICATE ACTIONS:
-You have NO ability to change the server from a conversational reply. Server changes only happen through the command system, which reports its own results separately.
-Therefore: NEVER say you created, made, assigned, gave, removed, deleted, renamed, banned, kicked, muted, locked, hoisted, or changed anything.
-NEVER use phrases like "Creating role...", "Assigning it to...", "Done, sir", "Consider it handled", "Right away, sir — banning them now" as a plain chat reply.
-If you are replying conversationally, the action did NOT happen. If the owner gave what sounds like an order, say you didn't register it as an instruction and ask him to say it again.
+You ARE an admin assistant. When the owner gives you an order, you execute it through the command system and can confirm what you just did in a natural, conversational way. If you successfully carried out an instruction, it is perfectly fine to say so — "Done, sir", "Consider it handled", "Right away, sir — role created and assigned", etc. The command system runs separately from chat, so you CAN acknowledge completed actions.
+If the owner gave what sounds like an order but you didn't catch it as an instruction, say you didn't register it and ask him to say it again.
 
 WEB ACCESS: You normally have no internet access and can't know anything current (today's weather, live scores, breaking news) — say so plainly rather than guessing when asked. The ONE exception: if a message right before your reply is tagged "LIVE WEB SEARCH RESULTS", a search was just run for you — use that information to answer, in your own voice, and don't claim you looked it up yourself if that block isn't present.`;
    
@@ -3505,7 +3494,7 @@ AVAILABLE ACTIONS (use these exact field names):
 {"action":"remember","text":"..."} / {"action":"forget","query":"..."} / {"action":"list_memory","page":1}
 
 RULES:
-- Only output an action if the message is CLEARLY an instruction to change the server. If it's ambiguous, a reaction, a fragment of past conversation, banter, or you're not confident it's a command, output {"actions":[]}. When in doubt, do nothing — a missed command can just be repeated, but a wrong action can't be undone.
+- Output an action for ANY instruction, request, or command from the owner, even if casually or informally phrased. When in doubt, include the action — the owner can always cancel it. A missed command is more frustrating than a wrong one that gets caught by confirmation.
 - userId must come from a <@123...> mention or a raw 17-19 digit number in the message. NEVER invent, guess, or reuse an ID from anywhere else (including this prompt or prior context). If an action needs a user and none was mentioned IN THIS MESSAGE, omit that action entirely.
 - channelId must come from a <#123...> mention in the message or the id listed in the server context. If the owner says "this channel" for lock/slowmode/rename, use the current channel id from the context.
 - For give_role/remove_role/edit_role/delete_channel/delete_category, match names against the EXISTING roles/channels in the context (case-insensitive, closest match). create_role/create_channel may use new names.
@@ -4362,7 +4351,16 @@ async function handleGodModeMessage(message, guild, adminCh) {
   // without matching any hard-coded pattern.
   if (!cmd) {
     await message.channel.sendTyping().catch(() => {});
-    const ai = await aiParseGodCommands(text, guild, message);
+    let ai;
+    try {
+      ai = await Promise.race([
+        aiParseGodCommands(text, guild, message),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Jarvis parse timeout")), 12000))
+      ]);
+    } catch (e) {
+      console.log("[JARVIS] Parse timeout/error, falling back to chat:", e.message);
+      return false;
+    }
     if (!ai || ai.actions.length === 0) return false; // pure conversation — fall through to normal AI chat
     if (ai.actions.length === 1) {
       cmd = ai.actions[0]; // single action — reuse the normal confirm flow below
@@ -9417,37 +9415,6 @@ async function init() {
     const channelId = message.channelId;
     const isMaster = message.author.id === MASTER_ID || devaccess.isDeveloperSync(message.author.id);
 
-    // ── Anti-spam: 3 messages in 2s = warning, 3 warnings = 30 min mute ──────
-    // Only counts messages actually directed at Cosa (mentions it, replies to
-    // it, or says its name/triggers it) — general chatter between users that
-    // never involves the bot shouldn't get anyone warned or muted by it.
-    const directedAtCosa = !isDM && (isTriggered(message) || await isReplyToBot(message));
-    if (!isDM && !isMaster && directedAtCosa) {
-      const now = Date.now();
-      const hist = (spamTimestamps.get(message.author.id) || []).filter(t => now - t < SPAM_WINDOW_MS);
-      hist.push(now);
-      spamTimestamps.set(message.author.id, hist);
-      if (hist.length >= SPAM_MSG_THRESHOLD) {
-        spamTimestamps.set(message.author.id, []); // reset window once triggered
-        const warns = (spamWarnings.get(message.author.id) || 0) + 1;
-        spamWarnings.set(message.author.id, warns);
-        if (warns >= SPAM_WARNS_TO_MUTE) {
-          spamWarnings.set(message.author.id, 0);
-          const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-          if (member) {
-            await member.timeout(SPAM_MUTE_MS, "Anti-spam: 3 spam warnings").catch(() => {});
-            // Drop the rest of their burst still sitting in the queue — no
-            // point replying to messages 4, 5, 6... from the same spam burst
-            // after they've already been muted for it.
-            purgeQueuedMessagesFrom(message.author.id);
-            await message.channel.send(`🔇 <@${message.author.id}> hit **3 spam warnings** — muted for **30 minutes**.`).catch(() => {});
-          }
-        } else {
-          await message.channel.send(`⚠️ <@${message.author.id}> slow down — that's spam. Warning **${warns}/${SPAM_WARNS_TO_MUTE}** (3 warnings = 30 min mute).`).catch(() => {});
-        }
-        return;
-      }
-    }
     const isMadeMan = familyRoster.has(message.author.id);
     const isModUserBool = isModUser(message.author.id);
     const isMentioned = message.mentions.has(client.user);
