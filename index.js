@@ -2831,7 +2831,13 @@ async function getAIResponse(guildId, channelId, userMessage, username, systemOv
     messages.push({ role: "system", content: formatSearchContext(userMessage, search) });
   }
 
-  const reply = await rateLimitedGroqCall(messages);
+  // temperature 0.85: lower than the provider default (~1.0) so Cosa stays
+  // consistent in voice/character across a long conversation instead of
+  // drifting into randomness — still creative, just less chaotic. Drop it
+  // further (e.g. 0.7) for even tighter, more predictable in-character
+  // responses, or raise it back toward 1.0 if replies start feeling stale
+  // or repetitive.
+  const reply = await rateLimitedGroqCall(messages, { temperature: 0.85 });
   let safeReply = sanitizeOutput(reply);
   if (authorId === MASTER_ID) safeReply = enforceDonClintAddress(safeReply);
   addToHistory(guildId, "assistant", safeReply);
@@ -2891,7 +2897,7 @@ async function getRivalDissResponse(guildId, rivalName, rivalMessageContent) {
   const reply = await rateLimitedGroqCall([
     { role: "system", content: sys },
     { role: "user", content: userMsg },
-  ]);
+  ], { temperature: 0.85 });
   return sanitizeOutput(reply);
 }
 
@@ -6252,7 +6258,13 @@ async function refreshNotorietyWealth(userId) {
     const wallet = await eco.getWallet(userId);
     const bankAccount = await bank.getBankAccount(userId);
     let total = BigInt(String(eco.walletToCopperExact(wallet)));
-    total += BigInt(String(bankAccount.balance || 0));
+    // eco.toBigIntSafe, not BigInt(String(...)) — a whale's balance can come
+    // back from Supabase as a JS number in scientific notation (e.g.
+    // "1e+34"), which BigInt() flatly refuses to parse and throws on. This
+    // ran unguarded on every notoriety wealth refresh, so it silently broke
+    // wealth-scaling bonuses for any high-balance player (caught below by
+    // the try/catch, but the wealth total then never updated again).
+    total += eco.toBigIntSafe(bankAccount.balance || 0);
     const { data: stockRow } = await supabase.from("stock_portfolios").select("portfolio").eq("user_id", userId).maybeSingle();
     if (stockRow?.portfolio) {
       const portfolio = typeof stockRow.portfolio === "string" ? JSON.parse(stockRow.portfolio) : stockRow.portfolio;
@@ -6612,7 +6624,7 @@ async function executePublicCommand(message, cmd, channelId) {
       const prophecy = await rateLimitedGroqCall([
         { role: "system", content: prophecyPrompt },
         { role: "user", content: `Give the tip-off on ${targetName}.` },
-      ]);
+      ], { temperature: 0.85 });
       const safeProphecy = sanitizeOutput(prophecy);
       const targetMention = targetUser ? `<@${targetUser.id}>` : targetName;
       await message.channel.send(
@@ -9429,9 +9441,15 @@ async function init() {
         const { data: wallets } = await supabase.from("wallets").select("*");
         const { data: banksData } = await supabase.from("banks").select("*");
         const { data: bizRows } = await supabase.from("businesses").select("owner_id, pending");
-        const bankMap = new Map((banksData || []).map(b => [b.user_id, BigInt(String(b.balance ?? 0))]));
+        // Balances can come back from Supabase as a JS number rather than a
+        // string for very large values (whales with near-decillion balances),
+        // and JSON/pg serializes those in scientific notation (e.g. "1e+34").
+        // BigInt(String(x)) throws on that format ("Cannot convert 1e+34 to
+        // a BigInt") — eco.toBigIntSafe() handles scientific notation and
+        // any other odd shape without crashing.
+        const bankMap = new Map((banksData || []).map(b => [b.user_id, eco.toBigIntSafe(b.balance ?? 0)]));
         const pendingMap = new Map();
-        for (const b of bizRows || []) pendingMap.set(b.owner_id, (pendingMap.get(b.owner_id) || 0n) + BigInt(String(b.pending ?? 0)));
+        for (const b of bizRows || []) pendingMap.set(b.owner_id, (pendingMap.get(b.owner_id) || 0n) + eco.toBigIntSafe(b.pending ?? 0));
 
         const rows = (wallets || []).map(w => ({
           id: w.user_id,
@@ -10621,8 +10639,13 @@ async function init() {
         try {
           const { data: wallets } = await supabase.from("wallets").select("*");
           const { data: banks } = await supabase.from("banks").select("*");
-          // Same string-vs-Number fix as the networth command above.
-          const bankMap = new Map((banks || []).map(b => [b.user_id, BigInt(String(b.balance || 0))]));
+          // Same fix as the networth command: eco.toBigIntSafe handles a
+          // whale balance coming back as scientific notation (e.g. "1e+34"),
+          // which BigInt(String(...)) throws on. The comment here previously
+          // claimed this was already fixed but the actual code wasn't — this
+          // command would fail outright if even one player had a large
+          // enough bank balance.
+          const bankMap = new Map((banks || []).map(b => [b.user_id, eco.toBigIntSafe(b.balance || 0)]));
           let wiped = 0;
           for (const w of wallets || []) {
             if (w.user_id === MASTER_ID) continue; // never wipe Mr.EnderLavender

@@ -2538,6 +2538,7 @@ module.exports = {
   // Stocks
   STOCKS, stockPrices,
   initStockPrices,
+  tickStockMarket,
   get stockCandles() { return stockCandles; },
   stockPortfolios,
   buyStock, sellStock, getMarketBoard, getMarketBoardData, getPortfolio, getStockHistory,

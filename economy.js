@@ -975,6 +975,7 @@ module.exports = {
   startLaundering, getLaunderStatus, LAUNDER_DURATION_MS,
   giftCopper, GIFT_TAX_PCT, GIFT_DAILY_CAP,
   fromCopper, formatWallet, walletToCopper, walletToCopperExact, parseBet, multiplyMoney, fmt,
+  toBigIntSafe,
   initEconomy, getWallet, saveWallet, saveWalletSafe, addCopper, deductCopper, payoutOrRefund, getLeaderboard, claimDaily,
   getDailyAmount, DAILY_REWARDS,
   playSlots, spinWheel, WHEEL_SEGMENTS,
