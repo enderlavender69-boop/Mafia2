@@ -747,6 +747,9 @@ const CONTROL_DENIALS = {
 function getControlDenial() {
   return CONTROL_DENIALS[currentMood.name] || "I only take orders from Mr.EnderLavender. Not you.";
 }
+function getMoodBlurb(mood) {
+  return (mood && MOOD_BLURBS[mood.name]) || "The Family can feel the shift in the air.";
+}
 
 // ── Per-guild moderation / session state ────────────────────────────────────
 // Everything below (family roster, warnings, exile, watchlist, mood, shadow
