@@ -210,16 +210,32 @@ CODE QUALITY / REFACTORING
 COMPARISON: KARANBERRY237-BIT/MAFIA (Reference Repo)
 ================================================================================
 
-NOTE: https://github.com/karanberry237-bit/mafia returns 404 (private/deleted/renamed).
-Unable to perform direct code comparison. This section documents Cosa/Mafia2's 
-current state for future reference.
+https://github.com/karanberry237-bit/mafia — Original/older version of the same bot.
+
+| Feature | karanberry237-bit/mafia (Original) | enderlavender69-boop/Mafia2 (Ours) |
+|---------|-------------------------------------|-----------------------------------|
+| **AI Model** | `gpt-oss-20b` (chat) + `gpt-oss-120b` (parse) | `gpt-oss-120b` (both) |
+| **Don Identity** | "Don Clint" throughout (AI + code) | **"Mr.EnderLavender"** (8 refs fixed) |
+| **Extremely Aggressive Mood** | Explicit racial slur demands (causes AI refusals) | **Rewritten** - no slurs, works with AI |
+| **Bank Scheduler** | No try/catch (crashes on Supabase error) | **Fixed** - per-account try/catch |
+| **Elite Market/Exchange** | Not present | **Added** - `Cosa exchange` chart rendering + price fix |
+| **Arena Enemies** | Standard mafia enemies only | **Limbus Company enemies** at 20% chance |
+| **Exchange Command** | Not present | **Added** - visual candlestick charts |
+
+Key fixes in Mafia2 over original:
+- **AI Model**: Switched to single `gpt-oss-120b` (stronger instruction following)
+- **Don Identity**: Fully migrated from "Don Clint" → "Mr.EnderLavender"
+- **Mood System**: Removed racial slur instructions that caused ~70% false-refusal rate
+- **Bank Scheduler**: Added try/catch to prevent permanent crash on DB hiccup
+- **Exchange**: New high-value stock market with visual charts (TITAN/OMERTA/CROWN)
+- **Arena**: 20% Limbus Company enemy spawn chance (Backstreets, Fixers, Abnormalities, Arbiters)
 
 Cosa/Mafia2 Unique Features (not in typical mafia bots):
 - Groq AI integration with multi-key rotation + token budgeting
-- Qwen3-32b for maximum speech freedom in roleplay
+- GPT-OSS 120B for roleplay with cleaned mood instructions
 - 30+ mood system with auto-rotation + manual override
 - Notoriety: activity leveling + wealth-scaling daily bonus
-- Full stock market: 3 panels (commodities, arms/crypto, penny) + elite market
+- Full stock market: 3 panels (commodities, arms/crypto, penny) + exchange
 - Firm system: player-created mutual funds with candlestick charts
 - Bank robbery: crew-based with tier difficulty scaling
 - Shadow Court: community voting exile system
@@ -235,8 +251,8 @@ DEPLOYMENT NOTES
 ================================================================================
 
 REQUIRED ENV VARS (update .env on Render):
-- GROQ_MODEL_CHAT=qwen/qwen3-32b
-- GROQ_MODEL_PARSE=qwen/qwen3-32b
+- GROQ_MODEL_CHAT=openai/gpt-oss-120b
+- GROQ_MODEL_PARSE=openai/gpt-oss-120b
 - GROQ_API_KEY (and _2, _3 for rotation)
 - DISCORD_TOKEN
 - SUPABASE_URL
