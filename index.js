@@ -5144,7 +5144,7 @@ function detectPublicCommand(text, message) {
   }
 
   // ── Stocks ────────────────────────────────────────────────────────────────
-  if (/\bcosa\s+(elite\s+market|blue\s+chip|high\s+value\s+market)\b/.test(lower)) return { action: "elite_market" };
+  if (/\bcosa\s+(exchange|elite\s+market|blue\s+chip|high\s+value\s+market)\b/.test(lower)) return { action: "exchange" };
   if (/\bcosa\s+stock\s+firm\b/.test(lower)) return { action: "stock_firm" };
   if (/\bcosa\s+stocks?\b/.test(lower) && !/buy|sell|portfolio|history/.test(lower)) {
     const tickerMatch = text.match(/stocks?\s+([A-Za-z]+)/i);
