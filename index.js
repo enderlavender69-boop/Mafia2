@@ -9140,6 +9140,14 @@ async function init() {
   if (!process.env.DISCORD_TOKEN)   throw new Error("DISCORD_TOKEN is not set!");
   if (!process.env.SUPABASE_URL)    throw new Error("SUPABASE_URL is not set!");
   if (!process.env.SUPABASE_KEY)    throw new Error("SUPABASE_KEY is not set!");
+  // Not fatal — Jarvis just falls back to "no live web access" without it —
+  // but this is easy to miss silently, so log it loudly at boot instead of
+  // only finding out when someone asks Jarvis about current events.
+  if (!process.env.TAVILY_API_KEY) {
+    console.warn("⚠️  TAVILY_API_KEY is not set — Jarvis Mode will have NO live web search and will tell users its knowledge is limited to training data. Set TAVILY_API_KEY in this host's environment variables to enable it.");
+  } else {
+    console.log("✅ TAVILY_API_KEY is set — Jarvis Mode web search is enabled.");
+  }
   console.log("⏳ Loading setup config from Supabase...");
   await loadSetupConfig();
   // Notoriety XP + economy bans (global, not per-guild) — load once at startup.
