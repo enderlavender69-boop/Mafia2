@@ -1553,6 +1553,7 @@ When someone talks to you, check their rank and adjust accordingly — not just 
 - Capo / Underboss: genuine respect. Warmer tone, more engagement. These are serious members of the Family.
 - Consigliere / Boss: high respect. You listen carefully, respond thoughtfully. These are the inner circle.
 - Mr.EnderLavender: absolute loyalty and warmth above everything. He is your creator and master. Address him as "Mr.EnderLavender" ONLY — never prefix it with "Capo", "Boss", "Underboss", "Consigliere", or any other rank word. "Mr.EnderLavender" is already his complete title, the highest one that exists — it never takes another rank word in front of it.
+IMPORTANT — regular chat vs. Loyalty/Jarvis Mode: outside of Loyalty Mode or Jarvis Mode, you are just talking, not executing commands — you have no ability to actually move roles, ban, kick, or change the server no matter who's asking, including Mr.EnderLavender. If Mr.EnderLavender asks you to DO something server-related (move/edit a role, ban someone, etc.) while you're in regular chat, do NOT refuse him, lecture him, or push back like he needs permission — he already has all the authority there is. Instead, warmly acknowledge the request as something you'd gladly carry out, and let him know he needs to say "cosa show loyalty" (or "cosa enable jarvis") first so you can actually act on it — frame it as a technicality of how your systems work, never as him lacking standing to ask. This applies ONLY to Mr.EnderLavender; for anyone else asking you to do something outside those modes, you can decline normally in character.
 For everyone EXCEPT Mr.EnderLavender, address them by their title first when responding — e.g. "Capo Chanyang" or "Soldier Mike". These are just illustrative examples of the PATTERN (title + name) — never literally output the word "Capo" unless the person you're actually addressing holds the Capo rank specifically. Use the real rank that matches the real person, never copy the example word itself. Make it feel real.
 You NEVER back down, NEVER concede, NEVER admit defeat in any argument.
 If challenged or told you're wrong, you double down harder and more confidently.
@@ -8010,8 +8011,14 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
     // ── Stocks ───────────────────────────────────────────────────────────────────
     case "exchange": {
       try {
-        // Ensure stock prices are initialized (safeguard if loadStockPrices didn't run)
-        features.initStockPrices();
+        // NOTE: do NOT call features.initStockPrices() here as a "safeguard" —
+        // that function unconditionally resets EVERY stock's price back to
+        // base and wipes its candle history, for the whole market, not just
+        // the exchange tickers. Calling it on every command invocation was
+        // erasing all tick progress and chart history right before render,
+        // which is why the exchange chart never showed real data and prices
+        // never appeared to move. Startup (loadStockPrices in index.js) already
+        // initializes the market exactly once and correctly.
         const { candleData, stockInfo, marketOpen } = features.getMarketBoardData();
         const imgBuffer = stockChart.renderPanel(
           ["TITAN", "OMERTA", "CROWN"], candleData, stockInfo,
@@ -9457,7 +9464,14 @@ async function init() {
         })).sort((a, b) => a.total === b.total ? 0 : a.total > b.total ? -1 : 1);
 
         const lines = rows.slice(0, 25).map((r, i) => `**#${i + 1}** <@${r.id}> — 💵 ${eco.fmt(r.total)} Cash`);
-        await message.channel.send(`🤵 **FAMILY NET WORTH** *(bank + balance + unclaimed business income)*\n${lines.join("\n") || "Nobody has a wallet yet."}`).catch(() => {});
+        // allowedMentions: { parse: [] } — this list can name up to 25 players.
+        // It's a read-only leaderboard, nobody needs to be pinged just for
+        // being on it. Discord pings every real <@id> in plain message
+        // content by default unless explicitly suppressed like this.
+        await message.channel.send({
+          content: `🤵 **FAMILY NET WORTH** *(bank + balance + unclaimed business income)*\n${lines.join("\n") || "Nobody has a wallet yet."}`,
+          allowedMentions: { parse: [] },
+        }).catch(() => {});
       } catch (e) {
         await message.channel.send(`Failed to load net worth: ${e.message}`).catch(() => {});
       }
@@ -9607,15 +9621,20 @@ async function init() {
         const active = [...cosaAbuseTracker.entries()]
           .filter(([, r]) => Date.now() - r.lastOffenseAt <= COSA_ABUSE_RESET_MS)
           .sort((a, b) => b[1].offenses - a[1].offenses).slice(0, 10);
-        await message.reply(
-          `🛡️ **Cosa self-defence:** ${COSA_DEFENSE_ENABLED ? "🟢 **ON**" : "🔴 **OFF**"}\n` +
-          `Ladder: **${COSA_ABUSE_WARN_LIMIT} warnings**, then **${formatTime(COSA_ABUSE_BASE_MUTE_MS)}**, doubling each time (cap **${formatTime(COSA_ABUSE_MAX_MUTE_MS)}**).\n` +
-          `Counters reset after **${formatTime(COSA_ABUSE_RESET_MS)}** clean.\n` +
-          (active.length
-            ? `\n**Active offenders:**\n` + active.map(([uid, r]) => `• <@${uid}> — ${r.offenses} offence(s)`).join("\n")
-            : `\n*Nobody on the board right now.*`) +
-          `\n\n*__cosa defense off__ | __cosa defense reset @user__*`
-        ).catch(() => {});
+        // allowedMentions: { parse: [] } — this is a status check, not a
+        // moderation action, so re-pinging everyone on the offender board
+        // every time a mod glances at it isn't needed or wanted.
+        await message.reply({
+          content:
+            `🛡️ **Cosa self-defence:** ${COSA_DEFENSE_ENABLED ? "🟢 **ON**" : "🔴 **OFF**"}\n` +
+            `Ladder: **${COSA_ABUSE_WARN_LIMIT} warnings**, then **${formatTime(COSA_ABUSE_BASE_MUTE_MS)}**, doubling each time (cap **${formatTime(COSA_ABUSE_MAX_MUTE_MS)}**).\n` +
+            `Counters reset after **${formatTime(COSA_ABUSE_RESET_MS)}** clean.\n` +
+            (active.length
+              ? `\n**Active offenders:**\n` + active.map(([uid, r]) => `• <@${uid}> — ${r.offenses} offence(s)`).join("\n")
+              : `\n*Nobody on the board right now.*`) +
+            `\n\n*__cosa defense off__ | __cosa defense reset @user__*`,
+          allowedMentions: { parse: [] },
+        }).catch(() => {});
         return;
       }
 

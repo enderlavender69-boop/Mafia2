@@ -2536,7 +2536,17 @@ module.exports = {
   clickVaultAlarm, getBankRobCooldownRemaining,
   MIN_BANK_CREW, MAX_BANK_CREW, BANK_ROB_COOLDOWN_MS,
   // Stocks
-  STOCKS, stockPrices,
+  STOCKS,
+  // Live getter, not a plain reference — loadStockPrices() REASSIGNS the
+  // internal `stockPrices` variable to a new object (rather than mutating
+  // the existing one) when it restores saved data from Supabase at boot.
+  // A plain exported reference would freeze at whatever `stockPrices` was
+  // at module-load time and silently go stale forever after that reassignment
+  // — which was making net worth count stock holdings as worth 0, and made
+  // the exchange/stock text fallbacks always show the base price instead of
+  // the live one. Same pattern as stockCandles below, which was already
+  // exported correctly.
+  get stockPrices() { return stockPrices; },
   initStockPrices,
   tickStockMarket,
   get stockCandles() { return stockCandles; },
