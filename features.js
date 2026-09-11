@@ -2012,6 +2012,35 @@ function clearHouseFavorArmed(userId) {
   armedHouseFavor.delete(userId);
 }
 // Daily purchase tracker: userId -> { date: "YYYY-MM-DD", lucky_charm: count }
+// ── Wealth-scaled shop pricing ──────────────────────────────────────────────
+// Flat item prices are trivial pocket change once a player is sitting on
+// billions+, so shop items stop being a meaningful Cash sink right when it'd
+// matter most. This applies a progressive multiplier based on net worth
+// (wallet + bank) — early/mid-game players (under 10M) pay the sticker price
+// exactly as before, nothing changes for them. Brackets step up from there,
+// capped at 2.5x so it stays a "luxury tax" rather than something punishing.
+const SHOP_PRICE_BRACKETS = [
+  { min: 100_000_000_000n, mult: 2.5,  label: "100B+ net worth" },
+  { min: 10_000_000_000n,  mult: 2.0,  label: "10B+ net worth"  },
+  { min: 1_000_000_000n,   mult: 1.6,  label: "1B+ net worth"   },
+  { min: 100_000_000n,     mult: 1.35, label: "100M+ net worth" },
+  { min: 10_000_000n,      mult: 1.15, label: "10M+ net worth"  },
+];
+async function getShopPriceInfo(userId) {
+  try {
+    const wallet = await eco.getWallet(userId);
+    const walletExact = eco.walletToCopperExact(wallet); // BigInt, exact
+    const bankBal = await bank.getBankBalance(userId).catch(() => 0);
+    const netWorth = walletExact + eco.toBigIntSafe(bankBal || 0);
+    for (const b of SHOP_PRICE_BRACKETS) {
+      if (netWorth >= b.min) return { mult: b.mult, label: b.label };
+    }
+    return { mult: 1, label: null };
+  } catch {
+    return { mult: 1, label: null }; // never block a purchase over a pricing lookup failing
+  }
+}
+
 const dailyPurchases = new Map();
 async function loadDailyPurchases() {
   try {
@@ -2083,9 +2112,11 @@ async function buyShopItem(userId, itemId, quantity = 1) {
     if (alreadyBought + quantity > limit) return `🔫 That would exceed the daily limit of **${limit}x ${SHOP_ITEMS[itemId].name}**. You can only buy **${limit - alreadyBought}** more today.`;
   }
 
-  const totalPrice = item.price * quantity;
+  const basePrice = item.price * quantity;
+  const priceInfo = await getShopPriceInfo(userId);
+  const totalPrice = Math.ceil(basePrice * priceInfo.mult);
   const deducted = await eco.deductCopper(userId, totalPrice).catch(() => null);
-  if (!deducted) return `🔫 You need **💵 ${eco.fmt(totalPrice)} Cash** to buy ${quantity}x **${item.name}**.`;
+  if (!deducted) return `🔫 You need **💵 ${eco.fmt(totalPrice)} Cash** to buy ${quantity}x **${item.name}**${priceInfo.mult > 1 ? ` (${priceInfo.label} surcharge applied)` : ""}.`;
 
   // Record daily purchase count
   if (DAILY_LIMITS && DAILY_LIMITS[itemId] !== undefined) recordDailyPurchase(userId, itemId, quantity);
@@ -2112,11 +2143,12 @@ async function buyShopItem(userId, itemId, quantity = 1) {
   await saveInventory(userId, inv);
 
   const totalDuration = item.duration && !MANUAL_ACTIVATION_ITEMS[itemId] ? item.duration * quantity : null;
+  const surchargeLine = priceInfo.mult > 1 ? `\n💸 **Wealth surcharge:** ${priceInfo.mult}x (${priceInfo.label}) — base price was 💵 ${eco.fmt(basePrice)}` : "";
   return (
     `🛒 **PURCHASED!** ${quantity}x ${item.name}\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `${item.desc}\n` +
-    `💰 Total cost: **💵 ${eco.fmt(totalPrice)} Cash**\n` +
+    `💰 Total cost: **💵 ${eco.fmt(totalPrice)} Cash**${surchargeLine}\n` +
     (totalDuration ? `⏰ Total duration: **${Math.round(totalDuration / 60000)} minutes**` : `🎯 **${quantity} use(s) added to inventory**`) +
     `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `*Use it with **Cosa use ${itemId}***`
@@ -2386,14 +2418,17 @@ function getActiveEffectsSummary(userId) {
   return out;
 }
 
-function getShopDisplay() {
+async function getShopDisplay(userId) {
   function fmtPrice(copper) {
     return `💵 ${eco.fmt(Math.floor(copper))} Cash`;
   }
+  const priceInfo = userId ? await getShopPriceInfo(userId) : { mult: 1, label: null };
   const lines = [`🛒 **FAMILY SHOP**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`];
+  if (priceInfo.mult > 1) lines.push(`*💸 Wealth surcharge active: **${priceInfo.mult}x** (${priceInfo.label}) — prices below are shown with it already applied.*`);
   for (const [id, item] of Object.entries(SHOP_ITEMS)) {
+    const shownPrice = priceInfo.mult > 1 ? Math.ceil(item.price * priceInfo.mult) : item.price;
     lines.push(
-      `${item.name} — **${fmtPrice(item.price)}**\n` +
+      `${item.name} — **${fmtPrice(shownPrice)}**\n` +
       `  *${item.desc}*\n` +
       `  ID: \`${id}\``
     );

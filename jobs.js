@@ -1,12 +1,19 @@
 // ── Jobs, Hustles & Quests ────────────────────────────────────────────────────
 // Self-contained set of repeatable ways to earn Cash, all flat-currency.
 // Rewards scale with the player's Family rank level (0 = street rat, 8 = boss;
-// Mr.EnderLavender bypasses everything). Cooldowns are in-memory Maps — same approach
-// the rest of the bot already uses for gamble/loan cooldowns, so a bot restart
-// simply clears the timers (players lose nothing but a wait).
+// Mr.EnderLavender bypasses everything). Cooldowns live in in-memory Maps for
+// fast reads, backed by the `job_cooldowns` Supabase table so a redeploy/
+// restart no longer wipes them (loaded once at boot, saved on every set).
 
 const eco = require("./economy");
 const features = require("./features");
+const { createClient } = require("@supabase/supabase-js");
+
+let supabase; // set by initJobs(), called from index.js at boot alongside bank.initBank()
+function initJobs(url, key) {
+  supabase = createClient(url, key);
+  console.log("💼 Jobs cooldown persistence initialized");
+}
 
 // ── Cooldowns ──────────────────────────────────────────────────────────────────
 const WORK_COOLDOWN_MS     = 10 * 60 * 1000;      // 10 min
@@ -21,6 +28,38 @@ const cooldowns = {
   smuggle:  new Map(),
 };
 
+// Persistence: one row per user in `job_cooldowns`, a single jsonb blob of
+// { work: ts, crime: ts, scavenge: ts, smuggle: ts }. Loaded once at boot
+// into the in-memory Maps above (so every check stays a fast Map.get, no
+// DB round-trip on the hot path), and fire-and-forget saved any time a
+// cooldown is set. Losing the very latest write on an ungraceful crash just
+// means one cooldown looks slightly shorter than it should next boot — not
+// worth blocking the player's response on an awaited DB write for that.
+async function loadJobCooldowns() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from("job_cooldowns").select("*");
+    if (error) throw error;
+    for (const row of data || []) {
+      const rec = typeof row.data === "string" ? JSON.parse(row.data) : (row.data || {});
+      for (const kind of Object.keys(cooldowns)) {
+        if (typeof rec[kind] === "number") cooldowns[kind].set(row.user_id, rec[kind]);
+      }
+    }
+    console.log(`[JOBS] Loaded cooldowns for ${(data || []).length} users`);
+  } catch (e) { console.error("[JOBS COOLDOWN LOAD]", e.message); }
+}
+function saveJobCooldown(userId) {
+  if (!supabase) return;
+  const rec = {};
+  for (const kind of Object.keys(cooldowns)) {
+    const ts = cooldowns[kind].get(userId);
+    if (ts) rec[kind] = ts;
+  }
+  supabase.from("job_cooldowns").upsert({ user_id: userId, data: rec, updated_at: new Date().toISOString() }, { onConflict: "user_id" })
+    .then(({ error }) => { if (error) console.error("[JOBS COOLDOWN SAVE]", error.message); });
+}
+
 function checkCooldown(kind, userId, ms, isDon) {
   if (isDon) return null;
   const last = cooldowns[kind].get(userId) || 0;
@@ -33,12 +72,13 @@ function checkCooldown(kind, userId, ms, isDon) {
   }
   return null;
 }
-function setCooldown(kind, userId) { cooldowns[kind].set(userId, Date.now()); }
+function setCooldown(kind, userId) { cooldowns[kind].set(userId, Date.now()); saveJobCooldown(userId); }
 
 // Wipes every in-memory job cooldown for every user — used by the Don-only
 // "reset economy" command after a full economy wipe.
 function resetAllCooldowns() {
   for (const kind of Object.keys(cooldowns)) cooldowns[kind].clear();
+  if (supabase) supabase.from("job_cooldowns").delete().neq("user_id", "").then(({ error }) => { if (error) console.error("[JOBS COOLDOWN RESET]", error.message); });
 }
 
 // Fast Hands: if active, halve the cooldown this job action sets and consume
@@ -48,9 +88,11 @@ function setCooldownMaybeHalved(kind, userId, ms, isDon) {
   if (!isDon && features.hasEffect(userId, "fast_hands")) {
     cooldowns[kind].set(userId, Date.now() - ms / 2);
     features.consumeItem(userId, "fast_hands");
+    saveJobCooldown(userId);
     return true; // fast hands triggered
   }
   cooldowns[kind].set(userId, Date.now());
+  saveJobCooldown(userId);
   return false;
 }
 
@@ -415,5 +457,6 @@ module.exports = {
   doWork, doCrime, doScavenge, doSmuggle,
   getQuestBoard, claimQuest, recordQuest,
   getCooldownStatus, resetAllCooldowns,
+  initJobs, loadJobCooldowns,
   JOBS_HELP,
 };

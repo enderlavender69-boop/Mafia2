@@ -152,8 +152,8 @@ async function getBlackoutRoleBackup() {
 
 function addToTreasuryFees(amount, type) {
   const key = type === "bank" ? "bankFees" : "gamblingLosses";
-  const current = BigInt(String(treasuryStats[key] || 0));
-  const delta = BigInt(String(amount || 0));
+  const current = eco.toBigIntSafe(treasuryStats[key] || 0);
+  const delta = eco.toBigIntSafe(amount || 0);
   treasuryStats[key] = (current + delta).toString();
   saveTreasuryStats().catch(() => {});
   // Commission tax on gambling — a cut of what would otherwise be the Don's
@@ -445,11 +445,13 @@ async function checkGambleCooldown(userId) {
       }
       features.consumeItem(userId, "noble_pass");
       gambleCooldowns.set(userId, Date.now());
+      saveGuildCooldown("gamble", userId);
       return null; // cooldown skipped
     }
     return "⏰ Slow down. You can gamble again in **" + Math.ceil(left/1000) + "s**.";
   }
   gambleCooldowns.set(userId, Date.now());
+  saveGuildCooldown("gamble", userId);
   return null;
 }
 const { createClient } = require("@supabase/supabase-js");
@@ -462,6 +464,7 @@ process.on('uncaughtException', (error) => console.error('Uncaught Exception:', 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, { realtime: { transport: ws } });
 eco.initEconomy(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 bank.initBank(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+jobs.initJobs(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 gangs.initGangs(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 turf.initTurf(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 businesses.initBusinesses(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -834,6 +837,43 @@ for (const key of Object.keys(guildDataDefaults())) {
     get() { return _guildData()[key]; },
     set(v) { _guildData()[key] = v; },
   });
+}
+
+// ── Guild-scoped cooldown persistence (gamble/rob/chess) ────────────────────
+// gambleCooldowns/robCooldowns/chessCooldowns above are per-guild in-memory
+// Maps (via the guildDataStore accessor trick). Backed by the `guild_cooldowns`
+// table (one row per user+guild, jsonb blob of { gamble, rob, chess } ts's) so
+// a redeploy/restart no longer wipes them. Loaded once at boot for every guild
+// that has data, saved fire-and-forget on every set — losing the very latest
+// write on an ungraceful crash just means one cooldown looks a bit shorter
+// next boot, not worth an awaited DB round-trip on the hot path.
+function saveGuildCooldown(kind, userId, guildId) {
+  const gid = guildId || _activeGuildDataId || "__dm__";
+  const gd = guildDataStore.get(gid);
+  if (!gd) return;
+  const rec = {};
+  for (const k of ["gamble", "rob", "chess"]) {
+    const map = k === "gamble" ? gd.gambleCooldowns : k === "rob" ? gd.robCooldowns : gd.chessCooldowns;
+    const ts = map?.get(userId);
+    if (ts) rec[k] = ts;
+  }
+  supabase.from("guild_cooldowns").upsert({ user_id: userId, guild_id: gid, data: rec, updated_at: new Date().toISOString() }, { onConflict: "user_id,guild_id" })
+    .then(({ error }) => { if (error) console.error("[GUILD COOLDOWN SAVE]", error.message); });
+}
+async function loadGuildCooldowns() {
+  try {
+    const { data, error } = await supabase.from("guild_cooldowns").select("*");
+    if (error) throw error;
+    for (const row of data || []) {
+      const rec = typeof row.data === "string" ? JSON.parse(row.data) : (row.data || {});
+      if (!guildDataStore.has(row.guild_id)) guildDataStore.set(row.guild_id, guildDataDefaults());
+      const gd = guildDataStore.get(row.guild_id);
+      if (typeof rec.gamble === "number") gd.gambleCooldowns.set(row.user_id, rec.gamble);
+      if (typeof rec.rob === "number")    gd.robCooldowns.set(row.user_id, rec.rob);
+      if (typeof rec.chess === "number")  gd.chessCooldowns.set(row.user_id, rec.chess);
+    }
+    console.log(`[COOLDOWNS] Loaded guild cooldowns for ${(data || []).length} user/guild pairs`);
+  } catch (e) { console.error("[GUILD COOLDOWN LOAD]", e.message); }
 }
 
 // Copies the given guild's saved config into the active globals. Call this
@@ -2452,8 +2492,12 @@ function getReasoningDefaults(model, opts = {}) {
 
 const groqClients = groqKeys.map(key => new Groq({ apiKey: key }));
 let currentGroqIndex = 0;
-let primaryChatBlocked = false;
-let primaryParseBlocked = false;
+// Timestamps, not plain booleans — a TPM block clears in under a minute and
+// even a TPD block clears the next day, but the old code set these to `true`
+// and never reset them, permanently downgrading to the small fallback model
+// for the rest of the process's life after a single transient rate limit.
+let primaryChatBlockedUntil = 0;
+let primaryParseBlockedUntil = 0;
 
 function getGroqClient() {
   return groqClients[currentGroqIndex];
@@ -2555,8 +2599,8 @@ async function rateLimitedGroqCall(messages, opts = {}) {
   console.log(`[GROQ] Prompt ~${estimateMessagesTokens(payload)} tokens (${payload.length} msgs)`);
 
   let activeModel = opts.model || AI_MODEL_CHAT;
-  if (activeModel === AI_MODEL_CHAT && primaryChatBlocked) activeModel = AI_FALLBACK_CHAT;
-  if (activeModel === AI_MODEL_PARSE && primaryParseBlocked) activeModel = AI_FALLBACK_PARSE;
+  if (activeModel === AI_MODEL_CHAT && Date.now() < primaryChatBlockedUntil) activeModel = AI_FALLBACK_CHAT;
+  if (activeModel === AI_MODEL_PARSE && Date.now() < primaryParseBlockedUntil) activeModel = AI_FALLBACK_PARSE;
 
   for (let attempt = 1; attempt <= groqClients.length * 2; attempt++) {
     const { client, idx } = getBestGroqClient();
@@ -2583,7 +2627,17 @@ async function rateLimitedGroqCall(messages, opts = {}) {
       const errMsg = err.message || "";
       const is413 = err.status === 413 || errMsg.includes("413") || errMsg.includes("Request too large");
       const is429 = err.status === 429 || errMsg.includes("429") || errMsg.includes("rate_limit") || errMsg.includes("Rate limit");
-      const isTPD = err.status === 429 && errMsg.includes("tokens per day") || errMsg.includes("TPD") || errMsg.includes("tokens per day");
+      // Groq reports two distinct kinds of 429: TPD (tokens per day — a hard
+      // daily cap) and TPM (tokens per minute — a much smaller, short-window
+      // cap that resets constantly). The old code only switched to the
+      // fallback model on TPD. TPM is actually the MORE common failure in
+      // practice (Groq's on-demand TPM caps are tiny — e.g. 8000 TPM for
+      // gpt-oss-20b) and each model has its OWN separate TPM budget, so
+      // switching models on a TPM hit is just as valid a fix as on TPD:
+      // it moves the request to a quota bucket that isn't currently full,
+      // instead of just re-trying the same exhausted model on a different key.
+      const isTPD = errMsg.includes("TPD") || errMsg.includes("tokens per day");
+      const isTPM = errMsg.includes("TPM") || errMsg.includes("tokens per minute");
 
       if (is413) {
         budget = Math.floor(budget * 0.5);
@@ -2593,16 +2647,20 @@ async function rateLimitedGroqCall(messages, opts = {}) {
         continue;
       }
 
-      if (is429 || isTPD) {
+      if (is429 || isTPD || isTPM) {
         const retryMatch = errMsg.match(/try again in ([\d.]+)s/);
         const retryAfter = retryMatch ? Math.ceil(parseFloat(retryMatch[1]) * 1000) : 65000;
         keyRateLimitedUntil[idx] = Date.now() + retryAfter;
-        console.log(`[GROQ] Key ${idx + 1} rate limited for ${Math.ceil(retryAfter/1000)}s — switching`);
-        if (isTPD) {
-          if (activeModel === AI_MODEL_CHAT) { primaryChatBlocked = true; activeModel = AI_FALLBACK_CHAT; console.log(`[GROQ] Primary CHAT model hit TPD — falling back to ${AI_FALLBACK_CHAT}`); }
-          else if (activeModel === AI_MODEL_PARSE) { primaryParseBlocked = true; activeModel = AI_FALLBACK_PARSE; console.log(`[GROQ] Primary PARSE model hit TPD — falling back to ${AI_FALLBACK_PARSE}`); }
-          else if (activeModel === AI_FALLBACK_CHAT) { console.log(`[GROQ] Fallback CHAT model also hit TPD`); }
-          else if (activeModel === AI_FALLBACK_PARSE) { console.log(`[GROQ] Fallback PARSE model also hit TPD`); }
+        console.log(`[GROQ] Key ${idx + 1} rate limited (${isTPD ? "TPD" : isTPM ? "TPM" : "429"}) for ${Math.ceil(retryAfter/1000)}s — switching`);
+        if (isTPD || isTPM) {
+          // TPD (daily cap) needs a long cooldown before retrying primary;
+          // TPM (per-minute cap) clears fast, so give it a short one instead
+          // of leaving the bot stuck on the fallback model for hours.
+          const blockMs = isTPD ? 6 * 60 * 60 * 1000 /* 6h */ : 2 * 60 * 1000 /* 2min */;
+          if (activeModel === AI_MODEL_CHAT) { primaryChatBlockedUntil = Date.now() + blockMs; activeModel = AI_FALLBACK_CHAT; console.log(`[GROQ] Primary CHAT model hit ${isTPD ? "TPD" : "TPM"} — falling back to ${AI_FALLBACK_CHAT} for ${Math.round(blockMs/1000)}s`); }
+          else if (activeModel === AI_MODEL_PARSE) { primaryParseBlockedUntil = Date.now() + blockMs; activeModel = AI_FALLBACK_PARSE; console.log(`[GROQ] Primary PARSE model hit ${isTPD ? "TPD" : "TPM"} — falling back to ${AI_FALLBACK_PARSE} for ${Math.round(blockMs/1000)}s`); }
+          else if (activeModel === AI_FALLBACK_CHAT) { console.log(`[GROQ] Fallback CHAT model also hit ${isTPD ? "TPD" : "TPM"} — no further fallback tier, retrying on key rotation only`); }
+          else if (activeModel === AI_FALLBACK_PARSE) { console.log(`[GROQ] Fallback PARSE model also hit ${isTPD ? "TPD" : "TPM"} — no further fallback tier, retrying on key rotation only`); }
         }
       } else {
         console.error(`[GROQ] Attempt ${attempt} key ${idx + 1} failed:`, errMsg);
@@ -4912,7 +4970,7 @@ function detectMasterCommand(text, message, explicitTrigger) {
     const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
-  if (/\bcosa\s+blackjack\b/.test(lower)) {
+  if (/\bcosa\s+(?:blackjack|bj)\b/.test(lower)) {
     const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
@@ -5300,7 +5358,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+slots\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "slots", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+coinflip\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "coinflip", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), choice: /heads/i.test(text) ? "heads" : /tails/i.test(text) ? "tails" : null }; }
   if (/\bcosa\s+wheel\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+blackjack\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+(?:blackjack|bj)\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+(hit|stand)\b/.test(lower)) return { action: lower.includes("hit") ? "bj_hit" : "bj_stand" };
   if (/\bcosa\s+race\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "race", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+roulette\b/.test(lower)) {
@@ -6258,7 +6316,7 @@ async function refreshNotorietyWealth(userId) {
   try {
     const wallet = await eco.getWallet(userId);
     const bankAccount = await bank.getBankAccount(userId);
-    let total = BigInt(String(eco.walletToCopperExact(wallet)));
+    let total = eco.walletToCopperExact(wallet); // already a BigInt — no need to round-trip through String()
     // eco.toBigIntSafe, not BigInt(String(...)) — a whale's balance can come
     // back from Supabase as a JS number in scientific notation (e.g.
     // "1e+34"), which BigInt() flatly refuses to parse and throws on. This
@@ -6671,6 +6729,7 @@ async function executePublicCommand(message, cmd, channelId) {
       const botCooldownLeft = CHESS_COOLDOWN_MS - (Date.now() - lastBotChallenge);
       if (botCooldownLeft > 0 && !donExempt(message.author.id)) return `Slow down. You can start a new game in **${Math.ceil(botCooldownLeft/1000)}s**.`;
       chessCooldowns.set(message.author.id, Date.now());
+      saveGuildCooldown("chess", message.author.id, message.guild?.id);
       const game = chessModule.createGame(message.author.id, message.author.username, "BOT", `Cosa (${diff.label})`, timeLimit);
       // Timeout handler
       const handleTimeout = async (channelId, g) => {
@@ -6754,6 +6813,7 @@ ${chessModule.getStatusLine(game)}`, files: [att2] }).catch(() => {});
       const cooldownLeft = CHESS_COOLDOWN_MS - (Date.now() - lastChallenge);
       if (cooldownLeft > 0 && !donExempt(message.author.id)) return `Slow down. You can challenge again in **${Math.ceil(cooldownLeft/1000)}s**.`;
       chessCooldowns.set(message.author.id, Date.now());
+      saveGuildCooldown("chess", message.author.id, message.guild?.id);
       const opponent = await client.users.fetch(oppId).catch(() => null);
       if (!opponent) return "Can't find that user.";
       chessModule.createChallenge(message.channelId, message.author.id, message.author.username, oppId, opponent.username);
@@ -6990,7 +7050,7 @@ ${botStatus}`, files: [botAtt] }).catch(() => {});
         bankMsg += "\n\n🤵 **THE VIG INCOME**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
           "💸 Bank fees collected: **" + bank.formatCopper(treasuryStats.bankFees) + "**\n" +
           "🎰 Gambling losses collected: **" + bank.formatCopper(treasuryStats.gamblingLosses) + "**\n" +
-          "💰 Total collected: **" + bank.formatCopper((BigInt(String(treasuryStats.bankFees || 0)) + BigInt(String(treasuryStats.gamblingLosses || 0))).toString()) + "**\n" +
+          "💰 Total collected: **" + bank.formatCopper((eco.toBigIntSafe(treasuryStats.bankFees || 0) + eco.toBigIntSafe(treasuryStats.gamblingLosses || 0)).toString()) + "**\n" +
           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
           "*All fees auto-deposited to your vault.*";
       }
@@ -7487,6 +7547,7 @@ ${botStatus}`, files: [botAtt] }).catch(() => {});
         const robLeft = ROB_COOLDOWN_MS - (Date.now() - lastRob);
         if (robLeft > 0) return "⏰ You need to lay low for **" + Math.ceil(robLeft/60000) + " min** before robbing again.";
         robCooldowns.set(message.author.id, Date.now());
+        saveGuildCooldown("rob", message.author.id, message.guild?.id);
       }
       const targetW = await eco.getWallet(cmd.targetId);
       const robberW = await eco.getWallet(message.author.id);
@@ -8341,6 +8402,7 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
         data.coinflipCooldowns?.clear();
         guildsCleared++;
       }
+      await supabase.from("guild_cooldowns").delete().neq("user_id", "").then(({ error }) => { if (error) console.error("[GUILD COOLDOWN RESET]", error.message); });
 
       return (
         `⏰ **ALL COOLDOWNS RESET** by order of Mr.EnderLavender.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -9237,6 +9299,8 @@ async function init() {
       await features.loadStockPrices();
       await features.loadInventories();
       await features.loadDailyPurchases();
+      await jobs.loadJobCooldowns();
+      await loadGuildCooldowns();
       features.startStockMarket(guild, null);
       // Init firms
       firms.initFirms(MASTER_ID, process.env.SUPABASE_URL, process.env.SUPABASE_KEY, client, GENERAL_CHANNEL_ID);
@@ -9269,7 +9333,7 @@ async function init() {
       };
       // Deposit accumulated gambling/fee earnings to Mr.EnderLavender's bank every hour
       const syncDonBank = async () => {
-        const total = (BigInt(String(treasuryStats.bankFees || 0)) + BigInt(String(treasuryStats.gamblingLosses || 0))).toString();
+        const total = (eco.toBigIntSafe(treasuryStats.bankFees || 0) + eco.toBigIntSafe(treasuryStats.gamblingLosses || 0)).toString();
         if (total > 0) await bank.deposit(MASTER_ID, total).catch(()=>{});
         setTimeout(syncDonBank, 60 * 60 * 1000);
       };
@@ -10531,6 +10595,7 @@ async function init() {
       }
       const resultMsg = await runGambleGame(req.userId, req.gameType, req.bet, req.choice);
       if (!donExempt(req.userId)) gambleCooldowns.set(req.userId, Date.now());
+      saveGuildCooldown("gamble", req.userId, interaction.guild?.id);
       await interaction.channel.send(`💵 **Using White Money only:**\n${resultMsg}`).catch(() => {});
       return;
     }
@@ -11070,7 +11135,7 @@ async function init() {
         return;
       }
       if (interaction.commandName === "shop") {
-        const shopText = features.getShopDisplay();
+        const shopText = await features.getShopDisplay(interaction.user.id);
         const embed = new EmbedBuilder().setColor(0xF1C40F).setDescription(shopText.slice(0, 4096));
         await interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
         return;
