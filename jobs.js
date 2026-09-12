@@ -7,6 +7,7 @@
 
 const eco = require("./economy");
 const features = require("./features");
+const prestige = require("./prestige");
 const { createClient } = require("@supabase/supabase-js");
 
 let supabase; // set by initJobs(), called from index.js at boot alongside bank.initBank()
@@ -213,7 +214,7 @@ async function doWork(userId, rankLevel, isDon) {
   const cd = checkCooldown("work", userId, WORK_COOLDOWN_MS, isDon);
   if (cd) return `⏰ You've done enough for now. Clock back in in **${cd}**.`;
 
-  const mult = rankMultiplier(rankLevel);
+  const mult = rankMultiplier(rankLevel) * prestige.getBonusMultiplier(userId);
   const pay = Math.floor(rint(2500, 8000) * mult);
   const job = pick(WORK_JOBS);
   const fastHandsUsed = setCooldownMaybeHalved("work", userId, WORK_COOLDOWN_MS, isDon);
@@ -243,7 +244,7 @@ async function doCrime(userId, rankLevel, isDon, deps = {}) {
 
   if (roll < 0.55) {
     // Success
-    const pay = Math.floor(rint(9000, 28000) * mult);
+    const pay = Math.floor(rint(9000, 28000) * mult * prestige.getBonusMultiplier(userId));
     const newW = await eco.addCopper(userId, pay);
     recordQuest(userId, "crime");
     const payLine = newW
@@ -293,7 +294,7 @@ async function doScavenge(userId, rankLevel, isDon) {
   if (cd) return `⏰ Nothing left to pick over yet. Try again in **${cd}**.`;
 
   const fastHandsUsed = setCooldownMaybeHalved("scavenge", userId, SCAVENGE_COOLDOWN_MS, isDon);
-  let pay = rint(400, 1800);
+  let pay = Math.floor(rint(400, 1800) * prestige.getBonusMultiplier(userId));
   let bonusLine = "";
   if (Math.random() < 0.08) {
     const bonus = rint(4000, 10000);
@@ -325,7 +326,7 @@ async function doSmuggle(userId, rankLevel, isDon, deps = {}) {
   // you can't cover in cash becomes debt to the Family, and the cash you do lose
   // becomes the Don's vig.
   if (Math.random() < 0.48) {
-    const pay = Math.floor(rint(70000, 160000) * mult);
+    const pay = Math.floor(rint(70000, 160000) * mult * prestige.getBonusMultiplier(userId));
     const newW = await eco.addCopper(userId, pay);
     recordQuest(userId, "smuggle");
     const payLine = newW

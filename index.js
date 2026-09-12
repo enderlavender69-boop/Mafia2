@@ -11,7 +11,9 @@ const bank = require("./bank.js");
 const features = require("./features.js");
 const casino = require("./casino.js");const firms = require("./firms.js");
 const jobs = require("./jobs.js");
+const prestige = require("./prestige.js");
 const stockChart = require("./stockchart.js");
+const notorietyChart = require("./notoritychart.js");
 const { tickFirmCandles } = require("./firmchart.js");
 const leaderboard = require("./leaderboard.js");
 const { cloneServerStructure } = require("./cloneServer.js");
@@ -465,6 +467,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 eco.initEconomy(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 bank.initBank(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 jobs.initJobs(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+prestige.initPrestige(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 gangs.initGangs(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 turf.initTurf(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 businesses.initBusinesses(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -874,6 +877,73 @@ async function loadGuildCooldowns() {
     }
     console.log(`[COOLDOWNS] Loaded guild cooldowns for ${(data || []).length} user/guild pairs`);
   } catch (e) { console.error("[GUILD COOLDOWN LOAD]", e.message); }
+}
+
+// ── Notoriety tier auto-roles ────────────────────────────────────────────────
+// ── Notoriety tier auto-roles ────────────────────────────────────────────────
+// Same hex palette as notoritychart.js's TIER_COLORS, so the rank card and
+// the actual Discord role color match for every tier.
+const NOTORIETY_ROLE_COLORS = {
+  nobody:      "#6b7280",
+  whisper:     "#9ca3af",
+  known:       "#60a5fa",
+  respected:   "#34d399",
+  connected:   "#a78bfa",
+  feared:      "#f472b6",
+  notorious:   "#fb923c",
+  untouchable: "#22d3ee",
+  legend:      "#facc15",
+  kingpin:     "#ffd700",
+};
+// guildId -> Map(tierKey -> roleId). Configured via "cosa set notoriety role
+// [tier] [@role]", persisted to the `notoriety_roles` table, applied
+// automatically whenever a player's notoriety tier changes (hooked into
+// announceNotoriety, which already fires exactly on level-up).
+const notorietyRoleMap = new Map();
+async function loadNotorietyRoles() {
+  try {
+    const { data, error } = await supabase.from("notoriety_roles").select("*");
+    if (error) throw error;
+    for (const row of data || []) {
+      if (!notorietyRoleMap.has(row.guild_id)) notorietyRoleMap.set(row.guild_id, new Map());
+      notorietyRoleMap.get(row.guild_id).set(row.tier_key, row.role_id);
+    }
+    console.log(`[NOTORIETY ROLES] Loaded ${(data || []).length} tier-role mappings`);
+  } catch (e) { console.error("[NOTORIETY ROLES LOAD]", e.message); }
+}
+async function setNotorietyRole(guildId, tierKey, roleId) {
+  if (!notorietyRoleMap.has(guildId)) notorietyRoleMap.set(guildId, new Map());
+  notorietyRoleMap.get(guildId).set(tierKey, roleId);
+  try {
+    await supabase.from("notoriety_roles").upsert({ guild_id: guildId, tier_key: tierKey, role_id: roleId }, { onConflict: "guild_id,tier_key" });
+  } catch (e) { console.error("[NOTORIETY ROLES SAVE]", e.message); }
+}
+async function removeNotorietyRole(guildId, tierKey) {
+  notorietyRoleMap.get(guildId)?.delete(tierKey);
+  try {
+    await supabase.from("notoriety_roles").delete().eq("guild_id", guildId).eq("tier_key", tierKey);
+  } catch (e) { console.error("[NOTORIETY ROLES DELETE]", e.message); }
+}
+// Assigns the member's current-tier role and strips every OTHER configured
+// notoriety-tier role, so exactly one tier role is held at a time (like a
+// level badge). No-ops quietly on any Discord API failure (missing perms,
+// role above the bot, member left, etc.) — this should never be the reason
+// a command fails for the player.
+async function syncNotorietyRole(guild, userId, tierKey) {
+  if (!guild) return;
+  const roleMap = notorietyRoleMap.get(guild.id);
+  if (!roleMap || roleMap.size === 0) return;
+  try {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return;
+    const targetRoleId = roleMap.get(tierKey);
+    const allConfiguredRoleIds = new Set(roleMap.values());
+    const toRemove = member.roles.cache.filter(r => allConfiguredRoleIds.has(r.id) && r.id !== targetRoleId);
+    for (const role of toRemove.values()) await member.roles.remove(role).catch(() => {});
+    if (targetRoleId && !member.roles.cache.has(targetRoleId)) {
+      await member.roles.add(targetRoleId).catch(() => {});
+    }
+  } catch (e) { console.error("[NOTORIETY ROLE SYNC]", e.message); }
 }
 
 // Copies the given guild's saved config into the active globals. Call this
@@ -1418,6 +1488,7 @@ const VALID_RANK_NAMES = Object.keys(RANKS).map(k => RANKS[k].title);
 // strippedRolesBackup, lockedChannelsBackup, lastMessageTime: all per-guild,
 // see guildDataStore below.
 const pendingConfirmations = new Map();
+const pendingAscend = new Map(); // userId -> timestamp, "Cosa prestige ascend" confirmation window
 // Tracks the last time Cosa redirected someone to #talk-with-cosa, per channel.
 // Prevents spamming a redirect notice on every single message in a busy
 // off-topic channel — only nudges once per cooldown window, then goes quiet.
@@ -4900,6 +4971,7 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+eco\s+unban\b/.test(lower) && targetId) return { action: "eco_unban", targetId };
   if (/\bcosa\s+admin\s+(help|commands|cmds)\b/.test(lower)) return { action: "eco_admin_help" };
   if (/\bcosa\s+eco\s+stats\b/.test(lower)) return { action: "eco_stats" };
+  if (/\bcosa\s+prestige\s+leaderboard\b/.test(lower)) return { action: "prestige_leaderboard" };
   if (/\bcosa\s+eco\s+wipe\s+rich\b/.test(lower)) return { action: "wipe_rich" };
   if (/\bcosa\s+daily\s+rates\b/.test(lower)) return { action: "daily_rates" };
   if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
@@ -4909,6 +4981,9 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+bank\b/.test(lower)) return { action: "bank_balance" };
   if (/\bcosa\s+rank\s+(help|commands|cmds)\b/.test(lower)) return { action: "rank_help" };
   if (/\bcosa\s+(notoriety|noto|rep|reputation)\b/.test(lower)) return { action: "notoriety", targetId };
+  if (/\bcosa\s+prestige\s+confirm\b/.test(lower)) return { action: "prestige_confirm" };
+  if (/\bcosa\s+prestige\s+ascend\b/.test(lower)) return { action: "prestige_ascend" };
+  if (/\bcosa\s+prestige\b/.test(lower)) return { action: "prestige" };
   if (/\bcosa\s+(eco|economy)\b/.test(lower)) return { action: "eco_help" };
   if (/\bcosa\s+(help|commands|cmds)\b/.test(lower)) return { action: "help" };
 
@@ -5110,6 +5185,9 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+remind\b/.test(lower)) return { action: "remind", durationMs: parseDuration(text), reason: text.replace(/\bcosa\b/i,"").replace(/\bremind\s+me\b/i,"").replace(/\bin\s+\d+\s+\w+/i,"").trim() };
   if (/\bcosa\s+rank\s+(help|commands|cmds)\b/.test(lower)) return { action: "rank_help" };
   if (/\bcosa\s+(notoriety|noto|rep|reputation)\b/.test(lower)) return { action: "notoriety", targetId };
+  if (/\bcosa\s+prestige\s+confirm\b/.test(lower)) return { action: "prestige_confirm" };
+  if (/\bcosa\s+prestige\s+ascend\b/.test(lower)) return { action: "prestige_ascend" };
+  if (/\bcosa\s+prestige\b/.test(lower)) return { action: "prestige" };
 
   // ── Gangs ────────────────────────────────────────────────────────────────
   if (/\bcosa\s+gang\s+create\b/.test(lower)) {
@@ -5670,15 +5748,32 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
   if (action === "eco_stats") {
     if (userId !== MASTER_ID) return "Don only.";
     const lb = await eco.getLeaderboard(100);
-    const totalCash = lb.reduce((a, w) => a + eco.walletToCopper(w), 0);
+    const totalWallets = lb.reduce((a, w) => a + eco.walletToCopper(w), 0);
+    // Bank balances weren't counted here before — "total coins in circulation"
+    // was silently wallet-only, understating real money supply by however
+    // much is sitting in bank vaults. Sum those in too for an honest figure.
+    const bankBalances = await Promise.all(lb.map(w => bank.getBankBalance(w.user_id).catch(() => 0)));
+    const totalBanked = bankBalances.reduce((a, b) => a + Number(b || 0), 0);
     const richest = lb[0];
     const ru = richest ? await client.users.fetch(richest.user_id).catch(()=>null) : null;
     return "📊 **FAMILY ECONOMY STATS**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-      "Total players: **" + lb.length + "**\n" +
-      "Total coins in circulation: **💵 " + eco.fmt(totalCash) + " Cash**\n" +
+      "Total players: **" + lb.length + "**" + (lb.length >= 100 ? " (top 100 shown — may be more)" : "") + "\n" +
+      "Wallet cash: **💵 " + eco.fmt(totalWallets) + " Cash**\n" +
+      "Banked (vaults): **🏦 " + eco.fmt(totalBanked) + " Cash**\n" +
+      "Total money supply: **💰 " + eco.fmt(totalWallets + totalBanked) + " Cash**\n" +
       "Richest: **" + (ru?.username||"Unknown") + "** — " + (richest ? eco.formatWallet(richest) : "N/A") + "\n" +
       "Gambling blacklist: **" + gamblingBlacklist.size + " players**\n" +
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+  }
+  if (action === "prestige_leaderboard") {
+    if (userId !== MASTER_ID) return "Don only.";
+    const top = prestige.getTopPrestige(15);
+    if (top.length === 0) return "🎖️ Nobody has ascended yet.";
+    const lines = await Promise.all(top.map(async (row, i) => {
+      const u = await client.users.fetch(row.userId).catch(() => null);
+      return `**#${i + 1}** ${u?.username || row.userId} — **${eco.fmt(row.points)} Respect** (${row.ascensions} ascension${row.ascensions === 1 ? "" : "s"})`;
+    }));
+    return `🎖️ **RESPECT LEADERBOARD**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${lines.join("\n")}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
   }
   if (action === "eco_nuke") {
     if (userId !== MASTER_ID) return "Don only.";
@@ -5696,7 +5791,7 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
   }
 
   // Route eco commands to public handler
-  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","roulette","mysterybox","arena","minesweeper","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","exchange","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place"];
+  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","roulette","mysterybox","arena","minesweeper","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","exchange","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place","prestige","prestige_ascend","prestige_confirm"];
   if (ecoActions.includes(action)) {
     return await executePublicCommand(message, cmd, channelId);
   }
@@ -6357,6 +6452,7 @@ function announceNotoriety(message, xpRes) {
       `${t.emoji} **NOTORIETY UP!** <@${message.author.id}> climbed to **${t.name}**` +
       (t.wealthPct > 0 ? ` — wealth scaling is now **${(t.wealthPct * 100).toFixed(3)}%** above 1M. 🔥` : ".")
     ).catch(() => {});
+    if (message.guild) syncNotorietyRole(message.guild, message.author.id, t.key).catch(() => {});
   } catch {}
 }
 
@@ -7104,25 +7200,88 @@ ${botStatus}`, files: [botAtt] }).catch(() => {});
       const xp = eco.getXP(targetId);
       const tier = eco.getNotorietyTier(xp);
       const next = eco.getNextNotorietyTier(xp);
-      const who = isSelf ? "You are" : `<@${targetId}> is`;
-      let progressLine;
-      if (next) {
-        const span = next.xp - tier.xp;
-        const done = xp - tier.xp;
-        const pct = span > 0 ? Math.max(0, Math.min(100, Math.floor((done / span) * 100))) : 0;
-        const filled = Math.round(pct / 10);
-        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-        progressLine = `\n${bar} **${pct}%**\n📈 **${eco.fmt(next.xp - xp)} XP** to go → **${next.emoji} ${next.name}**`;
-      } else {
-        progressLine = `\n👑 **Maxed out.** Top of the underworld — nobody's above you.`;
-      }
       await refreshNotorietyWealth(targetId);
       const wealth = eco.getNotorietyWealth(targetId);
       const wealthBonus = eco.getNotorietyBonus(targetId);
-      const bonusLine = wealth > 1000000n && tier.wealthPct > 0
-        ? `\n💎 Wealth scaling: **${(tier.wealthPct * 100).toFixed(3)}%** of net worth above 1M → **${eco.fmt(wealthBonus)} Cash/day**\n📊 Net worth counted: **${eco.fmt(wealth)} Cash**`
-        : `\n💎 Wealth scaling: *inactive until net worth exceeds 1M*`;
-      return `${tier.emoji} **NOTORIETY** ${tier.emoji}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${who} **${tier.name}**\n⭐ Total XP: **${eco.fmt(xp)}**${bonusLine}${progressLine}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Earn XP by using Cosa — running commands AND just talking to her.*`;
+      try {
+        const targetUser = await client.users.fetch(targetId).catch(() => null);
+        if (!targetUser) throw new Error("Could not fetch that user.");
+        const imgBuffer = await notorietyChart.renderNotorietyCard({
+          username: targetUser.username,
+          avatarUrl: targetUser.displayAvatarURL({ extension: "png", size: 256 }),
+          tier, nextTier: next, xp,
+          wealthBonus: Number(wealthBonus), netWorth: wealth,
+        });
+        const attachment = new AttachmentBuilder(imgBuffer, { name: "notoriety.png" });
+        await message.channel.send({
+          content: isSelf ? null : `${tier.emoji} <@${targetId}>'s standing in the Family:`,
+          files: [attachment],
+        }).catch(() => {});
+        return null;
+      } catch (e) {
+        console.error("[NOTORIETY CARD]", e.message);
+        // Fall back to the old plain-text version rather than a hard failure.
+        const who = isSelf ? "You are" : `<@${targetId}> is`;
+        let progressLine;
+        if (next) {
+          const span = next.xp - tier.xp;
+          const done = xp - tier.xp;
+          const pct = span > 0 ? Math.max(0, Math.min(100, Math.floor((done / span) * 100))) : 0;
+          const filled = Math.round(pct / 10);
+          const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+          progressLine = `\n${bar} **${pct}%**\n📈 **${eco.fmt(next.xp - xp)} XP** to go → **${next.emoji} ${next.name}**`;
+        } else {
+          progressLine = `\n👑 **Maxed out.** Top of the underworld — nobody's above you.`;
+        }
+        const bonusLine = wealth > 1000000n && tier.wealthPct > 0
+          ? `\n💎 Wealth scaling: **${(tier.wealthPct * 100).toFixed(3)}%** of net worth above 1M → **${eco.fmt(wealthBonus)} Cash/day**\n📊 Net worth counted: **${eco.fmt(wealth)} Cash**`
+          : `\n💎 Wealth scaling: *inactive until net worth exceeds 1M*`;
+        return `${tier.emoji} **NOTORIETY** ${tier.emoji}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${who} **${tier.name}**\n⭐ Total XP: **${eco.fmt(xp)}**${bonusLine}${progressLine}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Earn XP by using Cosa — running commands AND just talking to her.*`;
+      }
+    }
+
+    case "prestige": {
+      const info = await prestige.getPrestigeInfo(message.author.id);
+      return (
+        `🎖️ **RESPECT & ASCENSION**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `Current Respect: **${eco.fmt(info.currentPoints)}** (${info.ascensions} ascension${info.ascensions === 1 ? "" : "s"})\n` +
+        `Current bonus: **+${info.currentBonusPct.toFixed(2)}%** to work/crime/scavenge/smuggle/daily earnings\n\n` +
+        `💰 Lifetime Cash earned: **${eco.fmt(info.totalEarned)}**\n` +
+        (info.earnableIfAscendNow > 0
+          ? `⚡ Ascending right now would grant **+${eco.fmt(info.earnableIfAscendNow)} Respect** (new total: ${eco.fmt(info.currentPoints + info.earnableIfAscendNow)}, new bonus: +${info.bonusAfterAscend.toFixed(2)}%)\n\n` +
+            `⚠️ Ascending **wipes your wallet and bank to 0** (including lifetime-earned progress, so the counter restarts) in exchange for that Respect, permanently. Inventory, firms/stocks, gang, marriage, and notoriety are **not** touched.\n\n` +
+            `Type **Cosa prestige ascend** if you want to do this.`
+          : `You need at least **${eco.fmt(1_000_000_000)}** lifetime Cash earned to ascend — keep grinding jobs/crime/daily to get there.`)
+      );
+    }
+    case "prestige_ascend": {
+      const info = await prestige.getPrestigeInfo(message.author.id);
+      if (info.earnableIfAscendNow <= 0) {
+        return `🔫 You need at least **${eco.fmt(1_000_000_000)}** lifetime Cash earned to ascend. You're not there yet — check **Cosa prestige** for your progress.`;
+      }
+      pendingAscend.set(message.author.id, Date.now());
+      setTimeout(() => { const t = pendingAscend.get(message.author.id); if (t && Date.now() - t >= 30000) pendingAscend.delete(message.author.id); }, 30000);
+      return (
+        `⚠️ **ARE YOU SURE?** This wipes your wallet and bank to **0** — including your lifetime-earned counter — permanently, no undo.\n` +
+        `In exchange you'll gain **+${eco.fmt(info.earnableIfAscendNow)} Respect** (new bonus: +${info.bonusAfterAscend.toFixed(2)}% to future earnings, forever).\n\n` +
+        `Type **Cosa prestige confirm** within 30 seconds to go through with it.`
+      );
+    }
+    case "prestige_confirm": {
+      const pending = pendingAscend.get(message.author.id);
+      if (!pending || Date.now() - pending >= 30000) {
+        pendingAscend.delete(message.author.id);
+        return `🔫 No pending ascension (or it expired). Run **Cosa prestige ascend** first.`;
+      }
+      pendingAscend.delete(message.author.id);
+      const result = await prestige.ascend(message.author.id);
+      if (!result.success) return `🔫 ${result.reason}`;
+      return (
+        `🎖️ **ASCENDED.** Your wallet and bank are wiped clean, but the Family remembers what you built.\n` +
+        `+**${eco.fmt(result.pointsGained)} Respect** gained — total: **${eco.fmt(result.newTotal)}** (${result.ascensions} ascension${result.ascensions === 1 ? "" : "s"})\n` +
+        `New permanent bonus: **+${result.newBonusPct.toFixed(2)}%** to work/crime/scavenge/smuggle/daily earnings.\n\n` +
+        `Time to build it all back, faster this time.`
+      );
     }
     case "loan_info": {
       const rk = getFamilyRank(message.author.id) || "streetrat";
@@ -7371,7 +7530,7 @@ ${botStatus}`, files: [botAtt] }).catch(() => {});
       const scalableBankBal = eco.getScalableBalance(message.author.id, rawBankBal);
       const bankBonus = scalableBankBal >= BANK_DAILY_SCALE_THRESHOLD ? Math.floor(scalableBankBal * BANK_DAILY_SCALE_PCT) : 0;
 
-      const baseDailyExact = BigInt(Math.max(0, Math.floor(reward * (1 + marriageBonus) * boostMult)));
+      const baseDailyExact = BigInt(Math.max(0, Math.floor(reward * (1 + marriageBonus) * boostMult * prestige.getBonusMultiplier(message.author.id))));
       const finalReward = baseDailyExact + notorietyBonus + BigInt(Math.max(0, Math.floor(bankBonus)));
       const newW = await eco.claimDaily(message.author.id, finalReward.toString());
       if (!newW) return "❌ Something went wrong saving your daily. Try again in a moment.";
@@ -8683,6 +8842,12 @@ function buildEcoHelpText() {
     "  After 1,000,000 net worth, notoriety pays a tier-based % of wealth above 1M.",
     "  Net worth counts wallet + bank + stocks + firms + inventory/treasures.",
     "",
+    "🎖️  PRESTIGE (ASCENSION)",
+    "  Cosa prestige         ← see Respect, current bonus, and ascend progress",
+    "  Cosa prestige ascend  ← wipe wallet+bank for permanent Respect (needs 1B lifetime earned)",
+    "  Each Respect point = +0.5% to work/crime/scavenge/smuggle/daily earnings, forever, uncapped.",
+    "  Inventory, firms/stocks, gang, marriage, and notoriety are NOT touched by ascending.",
+    "",
     "🕴️  GANGS",
     "  Cosa gang create [name]",
     "  Cosa gang invite @user / accept / leave / kick @user / disband",
@@ -8756,6 +8921,12 @@ function buildRankHelpText(userId) {
     modLines.push("  Cosa remove main role [role]");
     modLines.push("  Cosa main roles  ← list them");
     modLines.push("");
+    modLines.push("🎖️  NOTORIETY ROLES");
+    modLines.push("  Cosa setup notoriety roles           ← auto-creates all 10 tier roles, colored + mapped");
+    modLines.push("  Cosa set notoriety role [tier] [@role] ← point a tier at an existing role instead");
+    modLines.push("  Cosa remove notoriety role [tier]     ← unmap a tier (doesn't delete the role)");
+    modLines.push("  Cosa notoriety roles                  ← list current mappings");
+    modLines.push("");
   }
   if (isDon) {
     modLines.push("⛓️  EXILE"); modLines.push("  Cosa exile @user"); modLines.push("  Cosa temp exile @user [time]"); modLines.push("  Cosa unexile @user"); modLines.push("");
@@ -8802,7 +8973,8 @@ function buildRankHelpText(userId) {
     modLines.push("  Cosa clear taint @user  ← clear Black/White split, unlock full gambling limit");
     modLines.push("  Cosa clear wanted @user  ← clear Marked/Most Wanted tag + unlock withdrawals + un-freeze interest");
     modLines.push("  Cosa reset rob shields  ← strip every active/stored Rob Shield, server-wide");
-    modLines.push("  Cosa eco stats  ← economy overview");
+    modLines.push("  Cosa eco stats  ← economy overview (now includes bank vaults, not just wallets)");
+    modLines.push("  Cosa prestige leaderboard  ← top Respect/ascension holders");
     modLines.push("  Cosa eco wipe rich  ← ⚠️ wipe all wallets with 💵 10,000,000+ Cash");
     modLines.push("  Cosa bank wipe all  ← ⚠️ wipe ALL bank balances");
     modLines.push("  Cosa reset cooldowns  ← ⚠️ resets EVERYONE's daily/work/crime/scavenge/smuggle/explore/gamble/rob/coinflip/chess cooldowns — use after an economy wipe");
@@ -9301,6 +9473,8 @@ async function init() {
       await features.loadDailyPurchases();
       await jobs.loadJobCooldowns();
       await loadGuildCooldowns();
+      await loadNotorietyRoles();
+      await prestige.loadPrestige();
       features.startStockMarket(guild, null);
       // Init firms
       firms.initFirms(MASTER_ID, process.env.SUPABASE_URL, process.env.SUPABASE_KEY, client, GENERAL_CHANNEL_ID);
@@ -9676,8 +9850,90 @@ async function init() {
       await message.reply(`✅ **${role.name}** removed from main roles.`).catch(() => {});
       return;
     }
+
+    // ── Notoriety tier auto-roles ────────────────────────────────────────────
+    // One command creates all 10 tier roles (skips "nobody" — everyone starts
+    // there by default, a role for it is meaningless clutter) with distinct
+    // colors matching the rank card's own tier palette, and wires them up so
+    // syncNotorietyRole() (hooked into announceNotoriety, on every level-up)
+    // auto-applies them from then on. Re-running it skips any tier that
+    // already has a valid mapped role, so it's safe to run again after adding
+    // a new server without duplicating roles.
+    if (message.guild && /^cosa\s+(setup|create)\s+notoriety\s+roles\b/i.test(lower)) {
+      const isBossPlus = isMaster || getFamilyRank(message.author.id) === "boss";
+      if (!isBossPlus) { await message.reply("🔫 Only the Boss or Mr.EnderLavender can set this up.").catch(() => {}); return; }
+      await message.reply("🔫 Setting up notoriety tier roles — one moment...").catch(() => {});
+      const created = [], skipped = [], failed = [];
+      for (const tier of eco.NOTORIETY_TIERS) {
+        if (tier.key === "nobody") continue;
+        const existingId = notorietyRoleMap.get(message.guild.id)?.get(tier.key);
+        if (existingId && message.guild.roles.cache.has(existingId)) { skipped.push(tier.name); continue; }
+        try {
+          const role = await message.guild.roles.create({
+            name: `${tier.emoji} ${tier.name}`,
+            color: NOTORIETY_ROLE_COLORS[tier.key] || undefined,
+            hoist: true, // the whole point is a visible status badge in the member list
+            permissions: [], // never inherit @everyone's permissions
+            reason: "Cosa — notoriety tier auto-role setup",
+          });
+          await setNotorietyRole(message.guild.id, tier.key, role.id);
+          created.push(tier.name);
+        } catch (e) {
+          console.error("[NOTORIETY ROLE SETUP]", tier.key, e.message);
+          failed.push(tier.name);
+        }
+      }
+      await message.reply(
+        `✅ **Notoriety roles configured.**\n` +
+        (created.length ? `Created: ${created.join(", ")}\n` : "") +
+        (skipped.length ? `Already set up (skipped): ${skipped.join(", ")}\n` : "") +
+        (failed.length ? `⚠️ Failed (check my role position/permissions): ${failed.join(", ")}\n` : "") +
+        `\nThese now auto-apply as members level up. Use **Cosa set notoriety role [tier] [@role]** to point any tier at a different existing role instead.`
+      ).catch(() => {});
+      return;
+    }
+    if (message.guild && /^cosa\s+set\s+notoriety\s+role\b/i.test(lower)) {
+      const isBossPlus = isMaster || getFamilyRank(message.author.id) === "boss";
+      if (!isBossPlus) { await message.reply("🔫 Only the Boss or Mr.EnderLavender can set notoriety roles.").catch(() => {}); return; }
+      const roleMention = message.content.match(/<@&(\d+)>/);
+      const withoutMention = message.content.replace(/^cosa\s+set\s+notoriety\s+role\s*/i, "").replace(/<@&\d+>/g, "").trim();
+      const { tier, corrected } = eco.resolveNotorietyTier(withoutMention);
+      if (!tier) { await message.reply(`🔫 Unknown tier. Valid: ${eco.formatTierList()}`).catch(() => {}); return; }
+      const role = roleMention
+        ? message.guild.roles.cache.get(roleMention[1])
+        : message.guild.roles.cache.find(r => withoutMention.toLowerCase().includes(r.name.toLowerCase()) && r.name.length > 2);
+      if (!role) { await message.reply("🔫 Couldn't find that role. Mention it with @role.").catch(() => {}); return; }
+      await setNotorietyRole(message.guild.id, tier.key, role.id);
+      await message.reply(`✅ **${tier.emoji} ${tier.name}** is now mapped to **${role.name}**${corrected ? ` (matched from "${withoutMention}")` : ""}. It'll apply automatically as members reach that tier.`).catch(() => {});
+      return;
+    }
+    if (message.guild && /^cosa\s+(remove|unset)\s+notoriety\s+role\b/i.test(lower)) {
+      const isBossPlus = isMaster || getFamilyRank(message.author.id) === "boss";
+      if (!isBossPlus) { await message.reply("🔫 Only the Boss or Mr.EnderLavender can remove notoriety roles.").catch(() => {}); return; }
+      const withoutPrefix = message.content.replace(/^cosa\s+(remove|unset)\s+notoriety\s+role\s*/i, "").trim();
+      const { tier } = eco.resolveNotorietyTier(withoutPrefix);
+      if (!tier) { await message.reply(`🔫 Unknown tier. Valid: ${eco.formatTierList()}`).catch(() => {}); return; }
+      await removeNotorietyRole(message.guild.id, tier.key);
+      await message.reply(`✅ **${tier.emoji} ${tier.name}** no longer has an auto-role mapped. (The Discord role itself wasn't deleted — just unmapped.)`).catch(() => {});
+      return;
+    }
+    if (message.guild && /^cosa\s+notoriety\s+roles\b/i.test(lower)) {
+      const roleMap = notorietyRoleMap.get(message.guild.id);
+      if (!roleMap || roleMap.size === 0) {
+        await message.reply("🔫 No notoriety roles set up yet. Run **Cosa setup notoriety roles** to create them all automatically.").catch(() => {});
+        return;
+      }
+      const lines = eco.NOTORIETY_TIERS.filter(t => t.key !== "nobody").map(t => {
+        const roleId = roleMap.get(t.key);
+        const role = roleId ? message.guild.roles.cache.get(roleId) : null;
+        return `${t.emoji} **${t.name}** — ${role ? `<@&${role.id}>` : "*(not set)*"}`;
+      });
+      await message.reply({ content: `🎖️ **NOTORIETY TIER ROLES**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${lines.join("\n")}`, allowedMentions: { parse: [] } }).catch(() => {});
+      return;
+    }
     // ── Cosa self-defence toggle (Boss+/Don). Persisted per guild. ──────────
     if (message.guild && /^cosa\s+defen[cs]e\b/i.test(lower)) {
+
       const isBossPlus = isMaster || getFamilyRank(message.author.id) === "boss";
       if (!isBossPlus) { await message.reply("🔫 Only the Boss or Mr.EnderLavender can change my defences.").catch(() => {}); return; }
 
