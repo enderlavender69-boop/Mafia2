@@ -93,22 +93,35 @@ function fromCopperExact(copperBigInt) {
   return { copper: copperBigInt.toString(), silver: 0, gold: 0, stellar: 0 };
 }
 
-// Suffix multipliers, longest/most-specific match first so the regex can't
-// accidentally grab a prefix of a longer suffix (not actually ambiguous here
-// since none of these share a common prefix, but keeping this as the single
-// source of truth means fmt() and parseBet() can never drift out of sync).
+// Suffix multipliers — the single source of truth for fmt(), parseBet(), and
+// anywhere else that needs to display or parse a shorthand amount. Ordered
+// longest/most-specific first: several of these share a prefix with a
+// shorter suffix already in the list (e.g. "sx" is a prefix of "sxd", "sp" of
+// "spd"), so a shorter entry earlier in the list could match early and leave
+// a stray trailing letter that then fails the exact-end anchor in parseBet's
+// regex — ordering the longer one first avoids ever relying on backtracking.
 const AMOUNT_SUFFIXES = [
-  ["dc", 33], // decillion
-  ["no", 30], // nonillion
-  ["oc", 27], // octillion
-  ["sp", 24], // septillion
-  ["sx", 21], // sextillion
-  ["qt", 18], // quintillion
-  ["qd", 15], // quadrillion
-  ["t", 12],
-  ["b", 9],
-  ["m", 6],
-  ["k", 3],
+  ["vg",  63], // vigintillion
+  ["nd",  60], // novemdecillion
+  ["od",  57], // octodecillion
+  ["spd", 54], // septendecillion
+  ["sxd", 51], // sexdecillion
+  ["qid", 48], // quindecillion
+  ["qad", 45], // quattuordecillion
+  ["td",  42], // tredecillion
+  ["dd",  39], // duodecillion
+  ["ud",  36], // undecillion
+  ["dc",  33], // decillion
+  ["no",  30], // nonillion
+  ["oc",  27], // octillion
+  ["sp",  24], // septillion
+  ["sx",  21], // sextillion
+  ["qt",  18], // quintillion
+  ["qd",  15], // quadrillion
+  ["t",   12], // trillion
+  ["b",    9], // billion
+  ["m",    6], // million
+  ["k",    3], // thousand
 ];
 
 // Parse money without ever routing giant values through float64. For ordinary
@@ -122,7 +135,11 @@ function parseDecimalToBigInt(decimal) {
 function parseBet(amount) {
   if (amount === null || amount === undefined) return null;
   const str = String(amount).trim();
-  const m = str.match(/^(\d+(?:\.\d+)?)\s*(k|m|b|t|qd|qt|sx|sp|oc|no|dc)?$/i);
+  // Suffix alternation built FROM AMOUNT_SUFFIXES (already ordered
+  // longest-first) instead of a separately hand-maintained list, so a new
+  // suffix added there is automatically parseable here too.
+  const suffixPattern = AMOUNT_SUFFIXES.map(([s]) => s).join("|");
+  const m = str.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s*(${suffixPattern})?$`, "i"));
   if (!m) return null;
 
   const decimal = m[1];
@@ -429,18 +446,24 @@ function getDailyAmount(rankKey) {
 // only when it isn't a round number (so "2m", not "2.0m"). Floors rather than
 // rounds so we never overflow a unit (e.g. 999,999 shows "999.9k", never
 // "1000k"). Below 1000 it's printed as-is.
+// Derived directly from AMOUNT_SUFFIXES (BigInt multipliers, largest first)
+// so fmt() and parseBet() genuinely can't drift apart — before this, fmt()
+// had its own separately hand-maintained copy of the suffix table.
+const FMT_SUFFIXES = AMOUNT_SUFFIXES.map(([suffix, power]) => [suffix, 10n ** BigInt(power)]);
+
 function fmt(n) {
   const exact = toBigIntSafe(n);
   const neg = exact < 0n;
   let value = neg ? -exact : exact;
-  const suffixes = [
-    ["dc", 10n ** 33n], ["no", 10n ** 30n], ["oc", 10n ** 27n],
-    ["sp", 10n ** 24n], ["sx", 10n ** 21n], ["qt", 10n ** 18n],
-    ["qd", 10n ** 15n], ["t", 10n ** 12n], ["b", 10n ** 9n],
-    ["m", 10n ** 6n], ["k", 10n ** 3n],
-  ];
   if (value < 1000n) return (neg ? "-" : "") + value.toString();
-  for (const [suffix, mult] of suffixes) {
+  // Past 999 * (largest suffix) there's no named tier left to catch it, so
+  // the old version of this loop would just keep counting up in multiples of
+  // the biggest suffix forever (e.g. "1000vg", "40000vg" instead of ever
+  // switching to scientific notation) — check for that BEFORE the loop and
+  // route to formatScientific() instead of ever reaching a broken state.
+  const largestSuffixMult = FMT_SUFFIXES[0][1];
+  if (value >= largestSuffixMult * 1000n) return (neg ? "-" : "") + formatScientific(value);
+  for (const [suffix, mult] of FMT_SUFFIXES) {
     if (value >= mult) {
       const whole = value / mult;
       const rem = value % mult;
@@ -448,7 +471,21 @@ function fmt(n) {
       return (neg ? "-" : "") + whole.toString() + (tenth ? `.${tenth}` : "") + suffix;
     }
   }
-  return (neg ? "-" : "") + value.toString();
+  // Beyond vigintillion (10^63) there's no named suffix left, so fall back to
+  // exact scientific notation — Balatro-style "1.234e67" — built straight off
+  // the BigInt's decimal digit count rather than a float, so it's precise no
+  // matter how many digits long the number actually is. The exponent doubles
+  // as an instant "how many zeros" readout.
+  return (neg ? "-" : "") + formatScientific(value);
+}
+
+// Exact scientific notation for a non-negative BigInt, no float64 involved —
+// digit count comes straight from the string form.
+function formatScientific(value) {
+  const s = value.toString();
+  const exp = s.length - 1;
+  const mantissa = s.length > 1 ? `${s[0]}.${s.slice(1, 4)}` : s;
+  return `${mantissa}E${exp}`;
 }
 
 // ── Notoriety (activity leveling) ─────────────────────────────────────────────
@@ -974,7 +1011,7 @@ module.exports = {
   splitBlackWhite, clearTaint,
   startLaundering, getLaunderStatus, LAUNDER_DURATION_MS,
   giftCopper, GIFT_TAX_PCT, GIFT_DAILY_CAP,
-  fromCopper, formatWallet, walletToCopper, walletToCopperExact, parseBet, multiplyMoney, fmt,
+  fromCopper, formatWallet, walletToCopper, walletToCopperExact, parseBet, multiplyMoney, fmt, formatScientific,
   toBigIntSafe,
   initEconomy, getWallet, saveWallet, saveWalletSafe, addCopper, deductCopper, payoutOrRefund, getLeaderboard, claimDaily,
   getDailyAmount, DAILY_REWARDS,
