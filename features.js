@@ -1099,9 +1099,10 @@ async function buyStock(userId, ticker, shares) {
   if (shares < 1) return "🔫 Buy at least 1 share.";
 
   const price = Math.max(0, Math.floor(stockPrices[ticker] || 0));
-  const sharesInt = Math.floor(Number(shares));
-  if (!Number.isSafeInteger(sharesInt) || sharesInt < 1) return "🔫 Share quantity is invalid or too large.";
-  const totalExact = BigInt(price) * BigInt(sharesInt);
+  const sharesBig = eco.toBigIntSafe(shares);
+  if (sharesBig < 1n) return "🔫 Buy at least 1 share.";
+  const sharesInt = Number(sharesBig);
+  const totalExact = BigInt(price) * sharesBig;
 
   const deducted = await eco.deductCopper(userId, totalExact.toString()).catch(() => null);
   if (!deducted) return `🔫 You need **💵 ${eco.fmt(totalExact)} Cash** to buy ${sharesInt} shares of ${ticker}.`;
@@ -1173,12 +1174,13 @@ async function sellStock(userId, ticker, shares) {
   }
   const portfolio = stockPortfolios.get(userId) || {};
   const held = portfolio[ticker] || 0;
-  if (held < shares) return `🔫 You only have **${held} shares** of ${ticker}.`;
+  const sharesBig = eco.toBigIntSafe(shares);
+  if (sharesBig < 1n) return "🔫 Sell at least 1 share.";
+  if (BigInt(held) < sharesBig) return `🔫 You only have **${held} shares** of ${ticker}.`;
 
   const price = Math.max(0, Math.floor(stockPrices[ticker] || 0));
-  const sharesInt = Math.floor(Number(shares));
-  if (!Number.isSafeInteger(sharesInt) || sharesInt < 1) return "🔫 Share quantity is invalid or too large.";
-  const totalExact = BigInt(price) * BigInt(sharesInt);
+  const sharesInt = Number(sharesBig);
+  const totalExact = BigInt(price) * sharesBig;
 
   const key = `${userId}-${ticker}`;
   const avgPrice = Math.max(0, Math.floor(Number(avgBuyPrice.get(key) || price)));
