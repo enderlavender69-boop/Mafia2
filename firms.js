@@ -459,6 +459,7 @@ async function sellFirmShares(userId, ticker, amount) {
   if (shareLock) return `⛔ **${firm.name}** is under a **share lock** — no buying or selling allowed.`;
 
   const owned = firm.holdings[userId] || 0;
+  if (typeof amount === "string" && amount.toLowerCase() === "all") amount = owned;
   if (owned < amount) return `🔫 You only own **${owned.toLocaleString()}** share(s).`;
   if (amount < 1) return "🔫 Minimum 1 share.";
   if (!Number.isSafeInteger(amount)) return "🔫 Quantity too large. Use stock market for giant trades.";
@@ -939,7 +940,7 @@ const FIRM_HELP = [
   "  Cosa firm deposit [TICKER] [amount]       ← owner: fund treasury",
   "  Cosa firm dividends [TICKER] [amount]     ← owner: pay all shareholders",
   "  Cosa firm buy [TICKER] [shares]           ← buy shares in a firm",
-  "  Cosa firm sell [TICKER] [shares]          ← sell shares back",
+  "  Cosa firm sell [TICKER] [shares]         ← or \"all\"",
   "  Cosa firm info [TICKER]                   ← firm details",
   "  Cosa firm list                            ← all active firms",
   "  Cosa firm portfolio                       ← your holdings + P&L",
