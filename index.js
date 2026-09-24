@@ -10556,7 +10556,7 @@ async function init() {
         return;
       }
       const suggestion = suggestCommandCorrection(userTextNormalized, explicitTrigger);
-      if (suggestion && !detectPublicCommand(userTextNormalized, message)) {
+      if (suggestion && !detectPublicCommand(userText, message)) {
         await message.reply(suggestion).catch(()=>{});
         return;
       }
@@ -10566,7 +10566,7 @@ async function init() {
       }
     }
 
-    const pubCmd = detectPublicCommand(userTextNormalized, message);
+    const pubCmd = detectPublicCommand(userText, message);
     if (pubCmd) {
       // Handle help commands directly without debt check
       if (pubCmd.action === "help" || pubCmd.action === "rank_help") {
