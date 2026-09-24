@@ -399,6 +399,7 @@ async function buyFirmShares(userId, ticker, amount) {
   if (shareLock) return `⛔ **${firm.name}** is under a **share lock** — no buying or selling allowed.`;
 
   if (amount < 1) return "🔫 Minimum 1 share.";
+  if (!Number.isSafeInteger(amount)) return "🔫 Quantity too large. Use stock market for giant trades.";
   const availableShares = firm.total_shares - Object.values(firm.holdings).reduce((a, b) => a + b, 0);
   if (amount > availableShares) return `🔫 Only **${availableShares.toLocaleString()}** shares available to buy.`;
 
@@ -460,6 +461,7 @@ async function sellFirmShares(userId, ticker, amount) {
   const owned = firm.holdings[userId] || 0;
   if (owned < amount) return `🔫 You only own **${owned.toLocaleString()}** share(s).`;
   if (amount < 1) return "🔫 Minimum 1 share.";
+  if (!Number.isSafeInteger(amount)) return "🔫 Quantity too large. Use stock market for giant trades.";
 
   const payout = firm.share_price * amount;
   if (firm.treasury < payout) return `🔫 Firm treasury too low to cover this sale. Treasury: **${formatCopper(firm.treasury)}**. Ask the owner to deposit funds.`;

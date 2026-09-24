@@ -1184,7 +1184,7 @@ async function sellStock(userId, ticker, shares) {
 
   const key = `${userId}-${ticker}`;
   const avgPrice = Math.max(0, Math.floor(Number(avgBuyPrice.get(key) || price)));
-  const profitLossExact = (BigInt(price) - BigInt(avgPrice)) * BigInt(sharesInt);
+  const profitLossExact = (BigInt(price) - BigInt(avgPrice)) * sharesBig;
   const plText = profitLossExact >= 0n
     ? `✅ **+💵 ${eco.fmt(profitLossExact)} profit**`
     : `❌ **-💵 ${eco.fmt(-profitLossExact)} loss**`;
