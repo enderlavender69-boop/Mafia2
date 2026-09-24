@@ -11471,9 +11471,11 @@ async function init() {
       }
       if (interaction.commandName === "eco") {
         const [p1, p2, p3] = buildEcoHelpText();
-        const e1 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p1);
-        const e2 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p2);
-        const e3 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p3);
+        // Discord caps total embed text per message at 6000 chars; /eco's three
+        // panels sum to ~6474 → reply rejected → "This interaction failed". Cap each to 2000.
+        const e1 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p1.slice(0, 2000));
+        const e2 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p2.slice(0, 2000));
+        const e3 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p3.slice(0, 2000));
         await interaction.reply({ embeds: [e1, e2, e3], ephemeral: true }).catch(() => {});
         return;
       }
