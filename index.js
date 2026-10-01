@@ -5369,6 +5369,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+stock\s+sell\b/.test(lower)) {
     const m = text.match(/stock\s+sell\s+([A-Z]+)\s+(\S+)/i);
     if (!m) return null;
+    if (m[2].toLowerCase() === "all") return { action: "stock_sell", ticker: m[1], shares: "all" };
     const shares = eco.parseBet(m[2]);
     return shares ? { action: "stock_sell", ticker: m[1], shares } : null;
   }
@@ -5525,6 +5526,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+firm\s+sell\b/.test(lower)) {
     const m = text.match(/firm\s+sell\s+([A-Za-z]{2,5})\s+(\S+)/i);
     if (!m) return null;
+    if (m[2].toLowerCase() === "all") return { action: "firm_sell", ticker: m[1], amount: "all" };
     const amount = eco.parseBet(m[2]);
     return amount ? { action: "firm_sell", ticker: m[1], amount: Number(amount) } : null;
   }
@@ -8906,7 +8908,7 @@ function buildEcoHelpText() {
     "  Cosa trade         ← ⚠️ COAL / GRAIN / WOOD",
     "  Cosa stocks/market/trade [TICKER] ← zoomed chart",
     "  Cosa stock buy [TICKER] [shares]",
-    "  Cosa stock sell [TICKER] [shares]",
+    "  Cosa stock sell [TICKER] [shares]  ← or \"all\"",
     "  Cosa stock portfolio / stock history",
     "  Cosa stock firm                       ← live charts for all Family firms",
     "  Cosa exchange                       ← TITAN / OMERTA / CROWN (whale-value shares)",

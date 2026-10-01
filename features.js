@@ -1174,6 +1174,7 @@ async function sellStock(userId, ticker, shares) {
   }
   const portfolio = stockPortfolios.get(userId) || {};
   const held = portfolio[ticker] || 0;
+  if (typeof shares === "string" && shares.toLowerCase() === "all") shares = held;
   const sharesBig = eco.toBigIntSafe(shares);
   if (sharesBig < 1n) return "🔫 Sell at least 1 share.";
   if (BigInt(held) < sharesBig) return `🔫 You only have **${held} shares** of ${ticker}.`;
