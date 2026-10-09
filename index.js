@@ -12,7 +12,6 @@ const features = require("./features.js");
 const casino = require("./casino.js");const firms = require("./firms.js");
 const jobs = require("./jobs.js");
 const prestige = require("./prestige.js");
-const prestigeTree = require("./prestigetree.js");
 const stockChart = require("./stockchart.js");
 const notorietyChart = require("./notoritychart.js");
 const { tickFirmCandles } = require("./firmchart.js");
@@ -1490,7 +1489,6 @@ const VALID_RANK_NAMES = Object.keys(RANKS).map(k => RANKS[k].title);
 // see guildDataStore below.
 const pendingConfirmations = new Map();
 const pendingAscend = new Map(); // userId -> timestamp, "Cosa prestige ascend" confirmation window
-const inUpgradeScreen = new Map(); // userId -> true while locked onto the post-ascension tree screen
 // Tracks the last time Cosa redirected someone to #talk-with-cosa, per channel.
 // Prevents spamming a redirect notice on every single message in a busy
 // off-topic channel — only nudges once per cooldown window, then goes quiet.
@@ -2591,6 +2589,11 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMembers,
   ],
+  // Global safety net: the bot may only ever ping individual USERS. @everyone,
+  // @here and role pings are blocked by default on every send/reply/edit, so a
+  // prompt-injected model reply can never mass-ping a server. Individual calls
+  // can still override this explicitly if a feature ever needs to.
+  allowedMentions: { parse: ["users"], roles: [] },
 });
 
 global._cosaClient = client; // for saveLockdownState error reporting
@@ -2771,6 +2774,9 @@ function sanitizeOutput(text) {
   for (const pattern of SENSITIVE_PATTERNS) {
     clean = clean.replace(pattern, "[REDACTED]");
   }
+  // Second layer vs. mass pings: break up @everyone / @here (zero-width space)
+  // so they can never render as a ping even if allowedMentions were bypassed.
+  clean = clean.replace(/@(everyone|here)/gi, "@\u200b$1");
   return clean;
 }
 
@@ -4930,18 +4936,18 @@ function detectMasterCommand(text, message, explicitTrigger) {
   // Admin economy commands
   if (/\bcosa\s+set\s+balance\b/.test(lower) && targetId) {
     const cleanT = text.replace(/<@!?\d+>/g,"").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "eco_set", targetId, amount: m?.[1], tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+reset\s+balance\b/.test(lower) && targetId) return { action: "eco_reset", targetId };
   if (/\bcosa\s+give\b/.test(lower) && targetId && !/\brole\b/i.test(lower)) {
     const cleanT = text.replace(/<@!?\d+>/g,"").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "eco_give", targetId, amount: m?.[1], tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+take\b/.test(lower) && targetId) {
     const cleanT = text.replace(/<@!?\d+>/g,"").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "eco_take", targetId, amount: m?.[1], tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+tax\b/.test(lower) && targetId) {
@@ -4976,16 +4982,13 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+prestige\s+leaderboard\b/.test(lower)) return { action: "prestige_leaderboard" };
   if (/\bcosa\s+eco\s+wipe\s+rich\b/.test(lower)) return { action: "wipe_rich" };
   if (/\bcosa\s+daily\s+rates\b/.test(lower)) return { action: "daily_rates" };
-  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+bank\s+upgrade\b/.test(lower)) return { action: "bank_upgrade" };
   if (/\bcosa\s+bank\s+tiers\b/.test(lower)) return { action: "bank_tiers" };
   if (/\bcosa\s+bank\b/.test(lower)) return { action: "bank_balance" };
   if (/\bcosa\s+rank\s+(help|commands|cmds)\b/.test(lower)) return { action: "rank_help" };
   if (/\bcosa\s+(notoriety|noto|rep|reputation)\b/.test(lower)) return { action: "notoriety", targetId };
-  if (/\bcosa\s+prestige\s+(leave|done|exit)\b/.test(lower)) return { action: "prestige_leave" };
-  if (/\bcosa\s+prestige\s+tree\b/.test(lower)) return { action: "prestige_tree" };
-  if (/\bcosa\s+prestige\s+buy\s+/.test(lower)) return { action: "prestige_buy", upgradeQuery: text.replace(/^.*?\bprestige\s+buy\s+/i, "").trim() };
   if (/\bcosa\s+prestige\s+confirm\b/.test(lower)) return { action: "prestige_confirm" };
   if (/\bcosa\s+prestige\s+ascend\b/.test(lower)) return { action: "prestige_ascend" };
   if (/\bcosa\s+prestige\b/.test(lower)) return { action: "prestige" };
@@ -5001,8 +5004,8 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+mood\b/.test(lower)) return { action: "show_mood" };
   // Economy commands
   if (/\bcosa\s+balance\b/.test(lower)) return { action: "balance", targetId: targetId || message.author.id };
-  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+bank\s+upgrade\b/.test(lower)) return { action: "bank_upgrade" };
   if (/\bcosa\s+bank\s+tiers\b/.test(lower)) return { action: "bank_tiers" };
   if (/\bcosa\s+bank\b/.test(lower)) return { action: "bank_balance" };
@@ -5026,7 +5029,7 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+(leaderboard|richest|lb)\b/.test(lower)) return { action: "leaderboard" };
   if (/\bcosa\s+pay\b/.test(lower) && targetId) {
     const cleanText = text.replace(/<@!?\d+>/g, "").trim();
-    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "pay", targetId, amount: amtMatch?.[1], tier: normalizeTierAlias(amtMatch?.[2]) };
   }
   if (/\bcosa\s+rob\s+bank\b/.test(lower) && targetId) return { action: "rob_bank", targetId };
@@ -5035,33 +5038,33 @@ function detectMasterCommand(text, message, explicitTrigger) {
   if (/\bcosa\s+normal\s+loan\b/.test(lower)) return { action: "loan", size: "loan" };
   if (/\bcosa\s+elite\s+loan\b/.test(lower)) return { action: "loan", size: "elite" };
   if (/\bcosa\s+ultra\s+loan\b/.test(lower)) return { action: "loan", size: "ultra" };
-  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+debt\b/.test(lower)) return { action: "check_debt" };
   if (/\bcosa\s+slots\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "slots", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+coinflip\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "coinflip", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), choice: /heads/i.test(text) ? "heads" : /tails/i.test(text) ? "tails" : null };
   }
   if (/\bcosa\s+wheel\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+(?:blackjack|bj)\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+(hit|stand)\b/.test(lower)) return { action: lower.includes("hit") ? "bj_hit" : "bj_stand" };
   if (/\bcosa\s+race\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "race", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+roulette\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+roulette/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     // Check color words against the FULL text, not just what's left after the
     // amount match — "black" starts with "b", which the amount regex's
     // billion-suffix alternative greedily swallows (e.g. "500 black" was
@@ -5086,18 +5089,18 @@ function detectMasterCommand(text, message, explicitTrigger) {
   }
   if (/\bcosa\s+myster(?:y)?\s*box\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+myster(?:y)?\s*box/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "mysterybox", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+arena\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+arena/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     const tierMatch = cleanT.match(/\b(easy|medium|hard|extreme|nightmare|boss)\b/i);
     return { action: "arena", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), difficulty: tierMatch?.[1]?.toLowerCase() || null };
   }
   if (/\bcosa\s+mines(?:weeper)?\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+mines(?:weeper)?/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "minesweeper", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
 
@@ -5190,9 +5193,6 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+remind\b/.test(lower)) return { action: "remind", durationMs: parseDuration(text), reason: text.replace(/\bcosa\b/i,"").replace(/\bremind\s+me\b/i,"").replace(/\bin\s+\d+\s+\w+/i,"").trim() };
   if (/\bcosa\s+rank\s+(help|commands|cmds)\b/.test(lower)) return { action: "rank_help" };
   if (/\bcosa\s+(notoriety|noto|rep|reputation)\b/.test(lower)) return { action: "notoriety", targetId };
-  if (/\bcosa\s+prestige\s+(leave|done|exit)\b/.test(lower)) return { action: "prestige_leave" };
-  if (/\bcosa\s+prestige\s+tree\b/.test(lower)) return { action: "prestige_tree" };
-  if (/\bcosa\s+prestige\s+buy\s+/.test(lower)) return { action: "prestige_buy", upgradeQuery: text.replace(/^.*?\bprestige\s+buy\s+/i, "").trim() };
   if (/\bcosa\s+prestige\s+confirm\b/.test(lower)) return { action: "prestige_confirm" };
   if (/\bcosa\s+prestige\s+ascend\b/.test(lower)) return { action: "prestige_ascend" };
   if (/\bcosa\s+prestige\b/.test(lower)) return { action: "prestige" };
@@ -5228,7 +5228,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+gang\s+bribe\s+decline\b/.test(lower)) return { action: "gang_bribe_decline" };
   if (/\bcosa\s+gang\s+bribe\b/.test(lower) && targetId) {
     const cleanText = text.replace(/<@!?\d+>/g, "").trim();
-    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "gang_bribe", targetId, amount: amtMatch?.[1], tier: normalizeTierAlias(amtMatch?.[2]) };
   }
   if (/\bcosa\s+gang\b/.test(lower)) return { action: "gang_info", gangName: "", targetId };
@@ -5310,7 +5310,7 @@ function detectPublicCommand(text, message) {
 
   // ── Giveaway ─────────────────────────────────────────────────────────────
   if (/\bcosa\s+giveaway\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?\s+([\dhms]+)/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?\s+([\dhms]+)/i);
     return m ? { action: "giveaway", amount: m[1], tier: normalizeTierAlias(m[2]), duration: m[3] } : { action: "giveaway_help" };
   }
   if (/\bcosa\s+greroll\b/.test(lower) || /\bcosa\s+giveaway\s+reroll\b/.test(lower)) {
@@ -5329,7 +5329,7 @@ function detectPublicCommand(text, message) {
   // ── Heist ─────────────────────────────────────────────────────────────────
   if (/\bcosa\s+heist\s+join\b/.test(lower)) return { action: "heist_join" };
   if (/\bcosa\s+heist\b/.test(lower)) {
-    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return m ? { action: "heist_start", amount: m[1], tier: normalizeTierAlias(m[2]) } : null;
   }
 
@@ -5361,17 +5361,12 @@ function detectPublicCommand(text, message) {
     return { action: "market_panel" };
   }
   if (/\bcosa\s+stock\s+buy\b/.test(lower)) {
-    const m = text.match(/stock\s+buy\s+([A-Z]+)\s+(\S+)/i);
-    if (!m) return null;
-    const shares = eco.parseBet(m[2]);
-    return shares ? { action: "stock_buy", ticker: m[1], shares } : null;
+    const m = text.match(/stock\s+buy\s+([A-Z]+)\s+(\d+)/i);
+    return m ? { action: "stock_buy", ticker: m[1], shares: parseInt(m[2]) } : null;
   }
   if (/\bcosa\s+stock\s+sell\b/.test(lower)) {
-    const m = text.match(/stock\s+sell\s+([A-Z]+)\s+(\S+)/i);
-    if (!m) return null;
-    if (m[2].toLowerCase() === "all") return { action: "stock_sell", ticker: m[1], shares: "all" };
-    const shares = eco.parseBet(m[2]);
-    return shares ? { action: "stock_sell", ticker: m[1], shares } : null;
+    const m = text.match(/stock\s+sell\s+([A-Z]+)\s+(\d+)/i);
+    return m ? { action: "stock_sell", ticker: m[1], shares: parseInt(m[2]) } : null;
   }
   if (/\bcosa\s+stock\s+portfolio\b/.test(lower)) return { action: "stock_portfolio" };
   if (/\bcosa\s+stock\s+history\b/.test(lower)) return { action: "stock_history" };
@@ -5429,7 +5424,7 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+(leaderboard|richest|lb)\b/.test(lower)) return { action: "leaderboard" };
   if (/\bcosa\s+pay\b/.test(lower) && targetId) {
     const cleanText = text.replace(/<@!?\d+>/g, "").trim();
-    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const amtMatch = cleanText.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "pay", targetId, amount: amtMatch?.[1], tier: normalizeTierAlias(amtMatch?.[2]) };
   }
   if (/\bcosa\s+rob\s+bank\b/.test(lower) && targetId) return { action: "rob_bank", targetId };
@@ -5438,23 +5433,23 @@ function detectPublicCommand(text, message) {
   if (/\bcosa\s+normal\s+loan\b/.test(lower)) return { action: "loan", size: "loan" };
   if (/\bcosa\s+elite\s+loan\b/.test(lower)) return { action: "loan", size: "elite" };
   if (/\bcosa\s+ultra\s+loan\b/.test(lower)) return { action: "loan", size: "ultra" };
-  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+loan\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_loan", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+pay\s+debt\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "pay_debt", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+debt\b/.test(lower)) return { action: "check_debt" };
-  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+deposit\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_deposit", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+bank\s+withdraw\b/.test(lower)) { const m = text.replace(/<@!?\d+>/g,"").match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "bank_withdraw", amount: m?.[1], tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+bank\s+upgrade\b/.test(lower)) return { action: "bank_upgrade" };
   if (/\bcosa\s+bank\s+tiers\b/.test(lower)) return { action: "bank_tiers" };
   if (/\bcosa\s+bank\b/.test(lower)) return { action: "bank_balance" };
-  if (/\bcosa\s+slots\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "slots", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+coinflip\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "coinflip", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), choice: /heads/i.test(text) ? "heads" : /tails/i.test(text) ? "tails" : null }; }
-  if (/\bcosa\s+wheel\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
-  if (/\bcosa\s+(?:blackjack|bj)\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+slots\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "slots", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+coinflip\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "coinflip", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), choice: /heads/i.test(text) ? "heads" : /tails/i.test(text) ? "tails" : null }; }
+  if (/\bcosa\s+wheel\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "wheel", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+(?:blackjack|bj)\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "blackjack", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+(hit|stand)\b/.test(lower)) return { action: lower.includes("hit") ? "bj_hit" : "bj_stand" };
-  if (/\bcosa\s+race\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "race", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
+  if (/\bcosa\s+race\b/.test(lower)) { const m = text.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i); return { action: "race", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) }; }
   if (/\bcosa\s+roulette\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+roulette/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     // Check color words against the FULL text, not just what's left after the
     // amount match — "black" starts with "b", which the amount regex's
     // billion-suffix alternative greedily swallows (e.g. "500 black" was
@@ -5479,18 +5474,18 @@ function detectPublicCommand(text, message) {
   }
   if (/\bcosa\s+myster(?:y)?\s*box\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+myster(?:y)?\s*box/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "mysterybox", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
   if (/\bcosa\s+arena\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+arena/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     const tierMatch = cleanT.match(/\b(easy|medium|hard|extreme|nightmare|boss)\b/i);
     return { action: "arena", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]), difficulty: tierMatch?.[1]?.toLowerCase() || null };
   }
   if (/\bcosa\s+mines(?:weeper)?\b/.test(lower)) {
     const cleanT = text.replace(/cosa\s+mines(?:weeper)?/i, "").trim();
-    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:vg|nd|od|spd|sxd|qid|qad|td|dd|ud|dc|no|oc|sp|sx|qt|qd|t|b|m|k)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
+    const m = cleanT.match(/(\d+(?:\.\d+)?\s*(?:(?:k|m|b|t|qd|qt|sx|sp|oc|no|dc)(?![a-zA-Z]))?)\s*(stellar|diamonds?|gold|chips?|silver|cash|copper)?/i);
     return { action: "minesweeper", amount: m?.[1] || "100", tier: normalizeTierAlias(m?.[2]) };
   }
 
@@ -5518,17 +5513,12 @@ function detectPublicCommand(text, message) {
     return m ? { action: "firm_dividends", ticker: m[1], priceStr: m[2] } : null;
   }
   if (/\bcosa\s+firm\s+buy\b/.test(lower)) {
-    const m = text.match(/firm\s+buy\s+([A-Za-z]{2,5})\s+(\S+)/i);
-    if (!m) return null;
-    const amount = eco.parseBet(m[2]);
-    return amount ? { action: "firm_buy", ticker: m[1], amount: Number(amount) } : null;
+    const m = text.match(/firm\s+buy\s+([A-Za-z]{2,5})\s+(\d+)/i);
+    return m ? { action: "firm_buy", ticker: m[1], amount: parseInt(m[2]) } : null;
   }
   if (/\bcosa\s+firm\s+sell\b/.test(lower)) {
-    const m = text.match(/firm\s+sell\s+([A-Za-z]{2,5})\s+(\S+)/i);
-    if (!m) return null;
-    if (m[2].toLowerCase() === "all") return { action: "firm_sell", ticker: m[1], amount: "all" };
-    const amount = eco.parseBet(m[2]);
-    return amount ? { action: "firm_sell", ticker: m[1], amount: Number(amount) } : null;
+    const m = text.match(/firm\s+sell\s+([A-Za-z]{2,5})\s+(\d+)/i);
+    return m ? { action: "firm_sell", ticker: m[1], amount: parseInt(m[2]) } : null;
   }
   if (/\bcosa\s+firm\s+info\b/.test(lower)) {
     const m = text.match(/firm\s+info\s+([A-Za-z]{2,5})/i);
@@ -5789,7 +5779,7 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
     if (top.length === 0) return "🎖️ Nobody has ascended yet.";
     const lines = await Promise.all(top.map(async (row, i) => {
       const u = await client.users.fetch(row.userId).catch(() => null);
-      return `**#${i + 1}** ${u?.username || row.userId} — **${eco.fmt(row.lifetimeEarned)} lifetime Respect** (${row.ascensions} ascension${row.ascensions === 1 ? "" : "s"})`;
+      return `**#${i + 1}** ${u?.username || row.userId} — **${eco.fmt(row.points)} Respect** (${row.ascensions} ascension${row.ascensions === 1 ? "" : "s"})`;
     }));
     return `🎖️ **RESPECT LEADERBOARD**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${lines.join("\n")}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
   }
@@ -5809,7 +5799,7 @@ async function executeMasterCommand(message, cmd, displayName, channelId) {
   }
 
   // Route eco commands to public handler
-  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","roulette","mysterybox","arena","minesweeper","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","exchange","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place","prestige","prestige_ascend","prestige_confirm","prestige_tree","prestige_buy","prestige_leave"];
+  const ecoActions = ["balance","daily","work","crime","scavenge","smuggle","quests","quest_claim","jobs_help","cooldowns","check_debt","pay_debt","pay_loan","loan","loan_info","bank_balance","bank_deposit","bank_withdraw","bank_upgrade","bank_tiers","leaderboard","pay","rob","rob_bank","slots","coinflip","wheel","blackjack","bj_hit","bj_stand","race","roulette","mysterybox","arena","minesweeper","show_mood","notoriety","chess_challenge","chess_bot","chess_accept","chess_decline","chess_resign","chess_board","chess_timer","chess_end","chess_queue","prophecy","8ball","rps","roll","truth","dare","truth_or_dare","ship","debate","quiz","serverinfo","userinfo","poll","remind","help","eco_help","rank_help","stocks","market_panel","penny_panel","exchange","stock_buy","stock_sell","stock_portfolio","stock_history","stock_single","market_tick","market_toggle","market_pump","market_crash","giveaway","giveaway_help","greroll","trivia_start","trivia_stop","heist_start","heist_join","marry","marry_accept","marry_decline","divorce","marriage_status","shop","shop_buy","shop_use","inventory","launder","launder_status","explore","explore_cancel","explore_choose","treasures","sell_treasure","afk","afk_back","bank_wipe_all","reset_rob_shields","reset_all_cooldowns","firm_create","firm_create_help","firm_confirm","firm_cancel","firm_issue","firm_price_set","firm_deposit","firm_dividends","firm_buy","firm_sell","firm_info","firm_list","firm_portfolio","firm_delete","firm_crash","firm_sanction","firm_escalate","firm_unsanction","firm_registry","stock_firm","firm_pump","firm_bomb","bounty_place","prestige","prestige_ascend","prestige_confirm"];
   if (ecoActions.includes(action)) {
     return await executePublicCommand(message, cmd, channelId);
   }
@@ -6482,14 +6472,6 @@ async function executePublicCommand(message, cmd, channelId) {
   // Economy blacklist — Don-imposed ban from the whole economy.
   if (_uid && _uid !== MASTER_ID && eco.isEcoBanned(_uid)) {
     return "⛔ You've been **blacklisted from the economy** by the Don. Take it up with him.";
-  }
-  // Locked onto the post-ascension Respect tree screen — block every other
-  // economy action (gambling, trading, jobs, etc.) until they explicitly
-  // leave with "Cosa prestige leave". A small allowlist of non-gameplay
-  // utility actions still works so they're not fully stranded mid-lookup.
-  const UPGRADE_SCREEN_ALLOWLIST = new Set(["prestige", "prestige_tree", "prestige_buy", "prestige_leave", "balance", "help", "eco_help", "rank_help"]);
-  if (_uid && inUpgradeScreen.get(_uid) && !UPGRADE_SCREEN_ALLOWLIST.has(action)) {
-    return "🎖️ You're still on the Respect tree — spend with **Cosa prestige buy [name]** or leave with **Cosa prestige leave** before doing anything else.";
   }
   // Notoriety XP for using Cosa (self-rate-limited inside addXP).
   if (_uid && _uid !== MASTER_ID) {
@@ -7270,14 +7252,12 @@ ${botStatus}`, files: [botAtt] }).catch(() => {});
       const info = await prestige.getPrestigeInfo(message.author.id);
       return (
         `🎖️ **RESPECT & ASCENSION**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `Respect balance: **${eco.fmt(info.balance)}** (spend it on upgrades — see **Cosa prestige tree**)\n` +
-        `Lifetime Respect earned: **${eco.fmt(info.lifetimeEarned)}** across ${info.ascensions} ascension${info.ascensions === 1 ? "" : "s"}\n` +
-        `Tree progress: **${info.ownedCount}/${info.totalUpgrades}** upgrades owned\n` +
+        `Current Respect: **${eco.fmt(info.currentPoints)}** (${info.ascensions} ascension${info.ascensions === 1 ? "" : "s"})\n` +
         `Current bonus: **+${info.currentBonusPct.toFixed(2)}%** to work/crime/scavenge/smuggle/daily earnings\n\n` +
-        `💰 Lifetime Cash earned this run: **${eco.fmt(info.totalEarned)}**\n` +
+        `💰 Lifetime Cash earned: **${eco.fmt(info.totalEarned)}**\n` +
         (info.earnableIfAscendNow > 0
-          ? `⚡ Ascending right now would grant **+${eco.fmt(info.earnableIfAscendNow)} Respect** to spend (new balance: ${eco.fmt(info.balance + info.earnableIfAscendNow)})\n\n` +
-            `⚠️ Ascending **wipes your wallet and bank to 0** (including lifetime-earned progress, so the counter restarts) in exchange for that Respect. Inventory, firms/stocks, gang, marriage, and notoriety are **not** touched.\n\n` +
+          ? `⚡ Ascending right now would grant **+${eco.fmt(info.earnableIfAscendNow)} Respect** (new total: ${eco.fmt(info.currentPoints + info.earnableIfAscendNow)}, new bonus: +${info.bonusAfterAscend.toFixed(2)}%)\n\n` +
+            `⚠️ Ascending **wipes your wallet and bank to 0** (including lifetime-earned progress, so the counter restarts) in exchange for that Respect, permanently. Inventory, firms/stocks, gang, marriage, and notoriety are **not** touched.\n\n` +
             `Type **Cosa prestige ascend** if you want to do this.`
           : `You need at least **${eco.fmt(1_000_000_000)}** lifetime Cash earned to ascend — keep grinding jobs/crime/daily to get there.`)
       );
@@ -7291,7 +7271,7 @@ ${botStatus}`, files: [botAtt] }).catch(() => {});
       setTimeout(() => { const t = pendingAscend.get(message.author.id); if (t && Date.now() - t >= 30000) pendingAscend.delete(message.author.id); }, 30000);
       return (
         `⚠️ **ARE YOU SURE?** This wipes your wallet and bank to **0** — including your lifetime-earned counter — permanently, no undo.\n` +
-        `In exchange you'll gain **+${eco.fmt(info.earnableIfAscendNow)} Respect** to spend on the tree (new balance: ${eco.fmt(info.balance + info.earnableIfAscendNow)}).\n\n` +
+        `In exchange you'll gain **+${eco.fmt(info.earnableIfAscendNow)} Respect** (new bonus: +${info.bonusAfterAscend.toFixed(2)}% to future earnings, forever).\n\n` +
         `Type **Cosa prestige confirm** within 30 seconds to go through with it.`
       );
     }
@@ -7304,74 +7284,12 @@ ${botStatus}`, files: [botAtt] }).catch(() => {});
       pendingAscend.delete(message.author.id);
       const result = await prestige.ascend(message.author.id);
       if (!result.success) return `🔫 ${result.reason}`;
-      // Lock the player onto the tree screen — they can't touch gambling,
-      // stocks, jobs, etc. again until they explicitly leave (see the gate
-      // at the top of executePublicCommand and "Cosa prestige leave" below).
-      inUpgradeScreen.set(message.author.id, true);
-      try {
-        const owned = prestige.getOwnedUpgrades(message.author.id);
-        const img = prestigeTree.renderTree(prestige.UPGRADE_TREE, owned, result.newBalance);
-        const attachment = new AttachmentBuilder(img, { name: "prestige_tree.png" });
-        await message.channel.send({
-          content:
-            `🎖️ **ASCENDED.** Your wallet and bank are wiped clean, but the Family remembers what you built.\n` +
-            `+**${eco.fmt(result.pointsGained)} Respect** gained — spendable balance: **${eco.fmt(result.newBalance)}**\n\n` +
-            `You're on the Respect tree now — spend with **Cosa prestige buy [upgrade name]**. ` +
-            `You won't be able to gamble, trade, or work again until you say **Cosa prestige leave**.`,
-          files: [attachment],
-        }).catch(() => {});
-        return null;
-      } catch (e) {
-        console.error("[PRESTIGE TREE RENDER]", e.message);
-        return `🎖️ **ASCENDED.** +**${eco.fmt(result.pointsGained)} Respect** — balance: **${eco.fmt(result.newBalance)}**.\nUse **Cosa prestige buy [upgrade name]** to spend it, and **Cosa prestige leave** when you're done (tree image failed to render, but the tree itself works fine — try **Cosa prestige tree** again).`;
-      }
-    }
-    case "prestige_tree": {
-      const info = await prestige.getPrestigeInfo(message.author.id);
-      try {
-        const owned = prestige.getOwnedUpgrades(message.author.id);
-        const img = prestigeTree.renderTree(prestige.UPGRADE_TREE, owned, info.balance);
-        const attachment = new AttachmentBuilder(img, { name: "prestige_tree.png" });
-        await message.channel.send({
-          content: `🎖️ **${eco.fmt(info.balance)} Respect** to spend · **${info.ownedCount}/${info.totalUpgrades}** owned · Buy with **Cosa prestige buy [name]**${inUpgradeScreen.get(message.author.id) ? " · Leave with **Cosa prestige leave**" : ""}`,
-          files: [attachment],
-        }).catch(() => {});
-        return null;
-      } catch (e) {
-        console.error("[PRESTIGE TREE RENDER]", e.message);
-        const lines = prestige.UPGRADE_TREE.map(u => {
-          const isOwned = owned => owned.has(u.key);
-          const own = prestige.getOwnedUpgrades(message.author.id);
-          const status = own.has(u.key) ? "✅ owned" : u.prereqs.every(p => own.has(p)) ? `💎 ${u.cost} Respect` : `🔒 needs ${u.prereqs.map(p => prestige.getUpgrade(p)?.name).join(", ")}`;
-          return `T${u.tier} ${u.icon} **${u.name}** — +${Math.round(u.bonusPct * 100)}% — ${status}`;
-        });
-        return `🎖️ **RESPECT TREE** (${eco.fmt(info.balance)} Respect)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${lines.join("\n")}`;
-      }
-    }
-    case "prestige_buy": {
-      const query = cmd.upgradeQuery;
-      const up = prestige.resolveUpgrade(query);
-      if (!up) return `🔫 Couldn't find an upgrade matching "${query}". Check **Cosa prestige tree** for names.`;
-      const result = await prestige.purchaseUpgrade(message.author.id, up.key);
-      if (!result.success) return `🔫 Can't buy **${up.name}**: ${result.reason}`;
-      try {
-        const owned = prestige.getOwnedUpgrades(message.author.id);
-        const img = prestigeTree.renderTree(prestige.UPGRADE_TREE, owned, result.newBalance);
-        const attachment = new AttachmentBuilder(img, { name: "prestige_tree.png" });
-        await message.channel.send({
-          content: `✅ Bought **${up.icon} ${up.name}** (+${Math.round(up.bonusPct * 100)}% earnings). Remaining balance: **${eco.fmt(result.newBalance)} Respect**.${inUpgradeScreen.get(message.author.id) ? " Say **Cosa prestige leave** when you're done spending." : ""}`,
-          files: [attachment],
-        }).catch(() => {});
-        return null;
-      } catch (e) {
-        console.error("[PRESTIGE TREE RENDER]", e.message);
-        return `✅ Bought **${up.icon} ${up.name}**. Remaining balance: **${eco.fmt(result.newBalance)} Respect**.`;
-      }
-    }
-    case "prestige_leave": {
-      if (!inUpgradeScreen.get(message.author.id)) return `🔫 You're not stuck on the tree screen — nothing to leave.`;
-      inUpgradeScreen.delete(message.author.id);
-      return `🔫 Back to business. Go make it all back.`;
+      return (
+        `🎖️ **ASCENDED.** Your wallet and bank are wiped clean, but the Family remembers what you built.\n` +
+        `+**${eco.fmt(result.pointsGained)} Respect** gained — total: **${eco.fmt(result.newTotal)}** (${result.ascensions} ascension${result.ascensions === 1 ? "" : "s"})\n` +
+        `New permanent bonus: **+${result.newBonusPct.toFixed(2)}%** to work/crime/scavenge/smuggle/daily earnings.\n\n` +
+        `Time to build it all back, faster this time.`
+      );
     }
     case "loan_info": {
       const rk = getFamilyRank(message.author.id) || "streetrat";
@@ -8837,9 +8755,6 @@ function buildEcoHelpText() {
     "  Cosa rob @user",
     "  Cosa leaderboard",
     "  Cosa daily rates  ← reward by rank",
-    "  Shorthand for amounts: k/m/b/t/qd/qt/sx/sp/oc/no/dc/ud/dd/td/qad/qid/sxd/spd/od/nd/vg",
-    "  (thousand → vigintillion, 10^63). Shown the same way in balance — e.g. \"4.2m\", \"1.5dc\".",
-    "  Past vigintillion, balances switch to scientific notation (e.g. \"1.234E67\") — exact, no rounding.",
     "",
     "💼  JOBS & HUSTLES  (pay Cash, scale with rank)",
     "  Cosa work       ← safe pay, 10m cooldown",
@@ -8908,7 +8823,7 @@ function buildEcoHelpText() {
     "  Cosa trade         ← ⚠️ COAL / GRAIN / WOOD",
     "  Cosa stocks/market/trade [TICKER] ← zoomed chart",
     "  Cosa stock buy [TICKER] [shares]",
-    "  Cosa stock sell [TICKER] [shares]  ← or \"all\"",
+    "  Cosa stock sell [TICKER] [shares]",
     "  Cosa stock portfolio / stock history",
     "  Cosa stock firm                       ← live charts for all Family firms",
     "  Cosa exchange                       ← TITAN / OMERTA / CROWN (whale-value shares)",
@@ -8936,13 +8851,10 @@ function buildEcoHelpText() {
     "  Net worth counts wallet + bank + stocks + firms + inventory/treasures.",
     "",
     "🎖️  PRESTIGE (ASCENSION)",
-    "  Cosa prestige              ← see Respect balance, bonus, and ascend progress",
-    "  Cosa prestige ascend       ← wipe wallet+bank for permanent Respect (needs 1B lifetime earned)",
-    "  Cosa prestige tree         ← view the upgrade tech tree",
-    "  Cosa prestige buy [name]   ← spend Respect on a tree upgrade",
-    "  Cosa prestige leave        ← return to normal play (required after ascending)",
-    "  After ascending you're locked on the tree screen — no gambling/trading/jobs — until you leave.",
-    "  Each upgrade grants its own permanent % to work/crime/scavenge/smuggle/daily earnings.",
+    "  Cosa prestige         ← see Respect, current bonus, and ascend progress",
+    "  Cosa prestige ascend  ← wipe wallet+bank for permanent Respect (needs 1B lifetime earned)",
+    "  Each Respect point = +0.5% to work/crime/scavenge/smuggle/daily earnings, forever, uncapped.",
+    "  Inventory, firms/stocks, gang, marriage, and notoriety are NOT touched by ascending.",
     "",
     "🕴️  GANGS",
     "  Cosa gang create [name]",
@@ -9571,7 +9483,6 @@ async function init() {
       await loadGuildCooldowns();
       await loadNotorietyRoles();
       await prestige.loadPrestige();
-      await prestige.loadPrestigeUpgrades();
       features.startStockMarket(guild, null);
       // Init firms
       firms.initFirms(MASTER_ID, process.env.SUPABASE_URL, process.env.SUPABASE_KEY, client, GENERAL_CHANNEL_ID);
@@ -10558,7 +10469,7 @@ async function init() {
         return;
       }
       const suggestion = suggestCommandCorrection(userTextNormalized, explicitTrigger);
-      if (suggestion && !detectPublicCommand(userText, message)) {
+      if (suggestion && !detectPublicCommand(userTextNormalized, message)) {
         await message.reply(suggestion).catch(()=>{});
         return;
       }
@@ -10568,7 +10479,7 @@ async function init() {
       }
     }
 
-    const pubCmd = detectPublicCommand(userText, message);
+    const pubCmd = detectPublicCommand(userTextNormalized, message);
     if (pubCmd) {
       // Handle help commands directly without debt check
       if (pubCmd.action === "help" || pubCmd.action === "rank_help") {
@@ -11481,11 +11392,9 @@ async function init() {
       }
       if (interaction.commandName === "eco") {
         const [p1, p2, p3] = buildEcoHelpText();
-        // Discord caps total embed text per message at 6000 chars; /eco's three
-        // panels sum to ~6474 → reply rejected → "This interaction failed". Cap each to 2000.
-        const e1 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p1.slice(0, 2000));
-        const e2 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p2.slice(0, 2000));
-        const e3 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p3.slice(0, 2000));
+        const e1 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p1);
+        const e2 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p2);
+        const e3 = new EmbedBuilder().setColor(0xF1C40F).setDescription(p3);
         await interaction.reply({ embeds: [e1, e2, e3], ephemeral: true }).catch(() => {});
         return;
       }
@@ -11867,5 +11776,7 @@ async function init() {
       console.error("❌ client.login() rejected:", err.message);
     });
 }
+
+init().catch(err => { console.error("Fatal startup error:", err.message); process.exit(1); }); // redeploy trigger
 
 init().catch(err => { console.error("Fatal startup error:", err.message); process.exit(1); }); // redeploy trigger
