@@ -5361,12 +5361,18 @@ function detectPublicCommand(text, message) {
     return { action: "market_panel" };
   }
   if (/\bcosa\s+stock\s+buy\b/.test(lower)) {
-    const m = text.match(/stock\s+buy\s+([A-Z]+)\s+(\d+)/i);
-    return m ? { action: "stock_buy", ticker: m[1], shares: parseInt(m[2]) } : null;
+    const m = text.match(/stock\s+buy\s+([A-Z]+)\s+(\S+)/i);
+    if (!m) return null;
+    if (m[2].toLowerCase() === "all") return { action: "stock_buy", ticker: m[1], shares: "all" };
+    const shares = eco.parseBet(m[2]);
+    return shares ? { action: "stock_buy", ticker: m[1], shares } : null;
   }
   if (/\bcosa\s+stock\s+sell\b/.test(lower)) {
-    const m = text.match(/stock\s+sell\s+([A-Z]+)\s+(\d+)/i);
-    return m ? { action: "stock_sell", ticker: m[1], shares: parseInt(m[2]) } : null;
+    const m = text.match(/stock\s+sell\s+([A-Z]+)\s+(\S+)/i);
+    if (!m) return null;
+    if (m[2].toLowerCase() === "all") return { action: "stock_sell", ticker: m[1], shares: "all" };
+    const shares = eco.parseBet(m[2]);
+    return shares ? { action: "stock_sell", ticker: m[1], shares } : null;
   }
   if (/\bcosa\s+stock\s+portfolio\b/.test(lower)) return { action: "stock_portfolio" };
   if (/\bcosa\s+stock\s+history\b/.test(lower)) return { action: "stock_history" };
@@ -5513,12 +5519,18 @@ function detectPublicCommand(text, message) {
     return m ? { action: "firm_dividends", ticker: m[1], priceStr: m[2] } : null;
   }
   if (/\bcosa\s+firm\s+buy\b/.test(lower)) {
-    const m = text.match(/firm\s+buy\s+([A-Za-z]{2,5})\s+(\d+)/i);
-    return m ? { action: "firm_buy", ticker: m[1], amount: parseInt(m[2]) } : null;
+    const m = text.match(/firm\s+buy\s+([A-Za-z]{2,5})\s+(\S+)/i);
+    if (!m) return null;
+    if (m[2].toLowerCase() === "all") return { action: "firm_buy", ticker: m[1], amount: "all" };
+    const amount = eco.parseBet(m[2]);
+    return amount ? { action: "firm_buy", ticker: m[1], amount: Number(amount) } : null;
   }
   if (/\bcosa\s+firm\s+sell\b/.test(lower)) {
-    const m = text.match(/firm\s+sell\s+([A-Za-z]{2,5})\s+(\d+)/i);
-    return m ? { action: "firm_sell", ticker: m[1], amount: parseInt(m[2]) } : null;
+    const m = text.match(/firm\s+sell\s+([A-Za-z]{2,5})\s+(\S+)/i);
+    if (!m) return null;
+    if (m[2].toLowerCase() === "all") return { action: "firm_sell", ticker: m[1], amount: "all" };
+    const amount = eco.parseBet(m[2]);
+    return amount ? { action: "firm_sell", ticker: m[1], amount: Number(amount) } : null;
   }
   if (/\bcosa\s+firm\s+info\b/.test(lower)) {
     const m = text.match(/firm\s+info\s+([A-Za-z]{2,5})/i);
@@ -8256,7 +8268,7 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
         );
         const attachment = new AttachmentBuilder(imgBuffer, { name: "exchange.png" });
         await message.channel.send({
-          content: `💎 **FAMILY EXCHANGE** — Whale-value shares for serious players.\n*Cosa stock buy TITAN/OMERTA/CROWN [shares]*`,
+          content: `💎 **FAMILY EXCHANGE** — Whale-value shares for serious players.\n*Cosa stock buy TITAN/OMERTA/CROWN [shares]  ← or "all"*`,
           files: [attachment],
         }).catch(() => {});
         return null;
@@ -8268,7 +8280,7 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
           const price = features.stockPrices[t] || info.basePrice * 100;
           return `💎 **${t}** — ${info.name} | **${eco.fmt(price)} Cash/share** | volatility ${(info.volatility * 100).toFixed(1)}%`;
         });
-        return "💎 **FAMILY EXCHANGE**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + lines.join("\n") + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Whale-value shares. Buy with **Cosa stock buy [TICKER] [shares]**.*";
+        return "💎 **FAMILY EXCHANGE**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + lines.join("\n") + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Whale-value shares. Buy with **Cosa stock buy [TICKER] [shares]** — or **all** to sell your entire position.*";
       }
     }
     case "stocks":
@@ -8287,7 +8299,7 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
         const imgBuffer = stockChart.renderPanel(panelTickers, candleData, stockInfo, panelTitle, panelSub, marketOpen);
         const attachment = new AttachmentBuilder(imgBuffer, { name: "market.png" });
         await message.channel.send({
-          content: `*Cosa stocks — commodities | Cosa market — arms/crypto | Cosa stock buy [TICKER] [shares]*`,
+          content: `*Cosa stocks — commodities | Cosa market — arms/crypto | Cosa stock buy [TICKER] [shares]  ← or "all"*`,
           files: [attachment],
         }).catch(() => {});
         return null;
@@ -8307,7 +8319,7 @@ Say **Cosa hit** to draw or **Cosa stand** to hold.`;
         );
         const attachment = new AttachmentBuilder(imgBuffer, { name: "penny.png" });
         await message.channel.send({
-          content: `⚠️ **PENNY STOCKS** — These are volatile! Small-timers can afford them but they can moon or crash hard.\n*Cosa stock buy COAL/GRAIN/WOOD [shares] | Cosa trade [TICKER] for zoomed chart*`,
+          content: `⚠️ **PENNY STOCKS** — These are volatile! Small-timers can afford them but they can moon or crash hard.\n*Cosa stock buy COAL/GRAIN/WOOD [shares]  ← or "all" | Cosa trade [TICKER] for zoomed chart*`,
           files: [attachment],
         }).catch(() => {});
         return null;
@@ -8823,7 +8835,7 @@ function buildEcoHelpText() {
     "  Cosa trade         ← ⚠️ COAL / GRAIN / WOOD",
     "  Cosa stocks/market/trade [TICKER] ← zoomed chart",
     "  Cosa stock buy [TICKER] [shares]",
-    "  Cosa stock sell [TICKER] [shares]",
+    "  Cosa stock sell [TICKER] [shares]  ← or \"all\"",
     "  Cosa stock portfolio / stock history",
     "  Cosa stock firm                       ← live charts for all Family firms",
     "  Cosa exchange                       ← TITAN / OMERTA / CROWN (whale-value shares)",

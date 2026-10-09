@@ -398,6 +398,10 @@ async function buyFirmShares(userId, ticker, amount) {
   const shareLock = firm.sanctions.some(s => s.type === "share_lock");
   if (shareLock) return `⛔ **${firm.name}** is under a **share lock** — no buying or selling allowed.`;
 
+  if (typeof amount === "string" && amount.toLowerCase() === "all") {
+    const availableShares = firm.total_shares - Object.values(firm.holdings).reduce((a, b) => a + b, 0);
+    amount = availableShares;
+  }
   if (amount < 1) return "🔫 Minimum 1 share.";
   if (!Number.isSafeInteger(amount)) return "🔫 Quantity too large. Use stock market for giant trades.";
   const availableShares = firm.total_shares - Object.values(firm.holdings).reduce((a, b) => a + b, 0);
