@@ -1,11 +1,10 @@
 {
   "name": "cosa",
   "version": "1.0.0",
-  "description": "Cosa \u2014 Discord bot powered by GROQ AI",
+  "description": "Cosa — Discord bot powered by GROQ AI",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "node test.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.100",
@@ -19,6 +18,6 @@
     "ws": "^8.18.0"
   },
   "engines": {
-    "node": "22.x"
+    "node": ">=20"
   }
 }

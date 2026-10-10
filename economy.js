@@ -16,7 +16,7 @@ function formatWallet(wallet) {
   // fallback, turning a failed payout into an uncaught exception on top of
   // it. Guarding here protects every one of those call sites at once.
   if (!wallet) return `💵 ${fmt(0)} Cash *(balance unavailable — try checking again)*`;
-  return `💵 ${fmt(walletToCopperExact(wallet))} Cash`;
+  return `💵 ${fmt(Math.floor(wallet.copper || 0))} Cash`;
 }
 
 function walletToCopper(wallet) {
@@ -33,10 +33,7 @@ function walletToCopper(wallet) {
 }
 
 function fromCopper(copper) {
-  // Keep even admin-set / display-only conversions exact. Returning a digit
-  // string is safe for Supabase JSON and prevents a giant balance from being
-  // rounded by Math.floor(Number(...)).
-  return { copper: toBigIntSafe(copper).toString(), silver: 0, gold: 0, stellar: 0 };
+  return { copper: Math.floor(copper), silver: 0, gold: 0, stellar: 0 };
 }
 
 // ── Exact (BigInt) money math ─────────────────────────────────────────────────
@@ -93,77 +90,39 @@ function fromCopperExact(copperBigInt) {
   return { copper: copperBigInt.toString(), silver: 0, gold: 0, stellar: 0 };
 }
 
-// Suffix multipliers — the single source of truth for fmt(), parseBet(), and
-// anywhere else that needs to display or parse a shorthand amount. Ordered
-// longest/most-specific first: several of these share a prefix with a
-// shorter suffix already in the list (e.g. "sx" is a prefix of "sxd", "sp" of
-// "spd"), so a shorter entry earlier in the list could match early and leave
-// a stray trailing letter that then fails the exact-end anchor in parseBet's
-// regex — ordering the longer one first avoids ever relying on backtracking.
+// Suffix multipliers, longest/most-specific match first so the regex can't
+// accidentally grab a prefix of a longer suffix (not actually ambiguous here
+// since none of these share a common prefix, but keeping this as the single
+// source of truth means fmt() and parseBet() can never drift out of sync).
 const AMOUNT_SUFFIXES = [
-  ["vg",  63], // vigintillion
-  ["nd",  60], // novemdecillion
-  ["od",  57], // octodecillion
-  ["spd", 54], // septendecillion
-  ["sxd", 51], // sexdecillion
-  ["qid", 48], // quindecillion
-  ["qad", 45], // quattuordecillion
-  ["td",  42], // tredecillion
-  ["dd",  39], // duodecillion
-  ["ud",  36], // undecillion
-  ["dc",  33], // decillion
-  ["no",  30], // nonillion
-  ["oc",  27], // octillion
-  ["sp",  24], // septillion
-  ["sx",  21], // sextillion
-  ["qt",  18], // quintillion
-  ["qd",  15], // quadrillion
-  ["t",   12], // trillion
-  ["b",    9], // billion
-  ["m",    6], // million
-  ["k",    3], // thousand
+  ["dc",  1e33], // decillion
+  ["no",  1e30], // nonillion
+  ["oc",  1e27], // octillion
+  ["sp",  1e24], // septillion
+  ["sex", 1e21], // sextillion
+  ["qt",  1e18], // quintillion
+  ["qd",  1e15], // quadrillion
+  ["t",   1e12], // trillion
+  ["b",   1e9],  // billion
+  ["m",   1e6],  // million
+  ["k",   1e3],  // thousand
 ];
-
-// Parse money without ever routing giant values through float64. For ordinary
-// amounts we keep returning Number so legacy command code remains compatible;
-// once the value exceeds MAX_SAFE_INTEGER we return its exact decimal string.
-function parseDecimalToBigInt(decimal) {
-  const [whole, fraction = ""] = String(decimal).split(".");
-  return BigInt(whole || "0") * (10n ** BigInt(fraction.length)) + BigInt(fraction || "0");
-}
 
 function parseBet(amount) {
   if (amount === null || amount === undefined) return null;
   const str = String(amount).trim();
-  // Suffix alternation built FROM AMOUNT_SUFFIXES (already ordered
-  // longest-first) instead of a separately hand-maintained list, so a new
-  // suffix added there is automatically parseable here too.
-  const suffixPattern = AMOUNT_SUFFIXES.map(([s]) => s).join("|");
-  const m = str.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s*(${suffixPattern})?$`, "i"));
-  if (!m) return null;
-
-  const decimal = m[1];
+  const m = str.match(/^(\d+(?:\.\d+)?)\s*(k|m|b|t|qd|qt|sex|sp|oc|no|dc)?$/i);
+  if (!m) {
+    // Fallback for plain ints that don't match the shorthand pattern
+    const num = parseInt(str);
+    return (!isNaN(num) && num > 0) ? num : null;
+  }
+  let num = parseFloat(m[1]);
   const suffix = (m[2] || "").toLowerCase();
-  const power = (AMOUNT_SUFFIXES.find(([s]) => s === suffix) || ["", 0])[1];
-  const [whole, fraction = ""] = decimal.split(".");
-  const scale = 10n ** BigInt(fraction.length);
-  const numerator = BigInt(whole || "0") * scale + BigInt(fraction || "0");
-  const scaled = (numerator * (10n ** BigInt(power))) / scale;
-  if (scaled <= 0n) return null;
-  return scaled <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(scaled) : scaled.toString();
-}
-
-// Exact money multiplication for gambling/fee calculations. `multiplier` may
-// be an integer or decimal such as 2.5 / 0.5 / 1.2. Result is Number while
-// safe, otherwise an exact decimal string.
-function multiplyMoney(amount, multiplier) {
-  const a = toBigIntSafe(amount);
-  const m = String(multiplier);
-  const [whole, fraction = ""] = m.split(".");
-  const den = 10n ** BigInt(fraction.length);
-  const num = BigInt(whole || "0") * den + BigInt(fraction || "0");
-  const result = (a * num) / den;
-  return result <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(result) : result.toString();
+  const entry = AMOUNT_SUFFIXES.find(([s]) => s === suffix);
+  if (entry) num *= entry[1];
+  num = Math.floor(num);
+  return num > 0 ? num : null;
 }
 
 // ── Supabase Wallet Store ─────────────────────────────────────────────────────
@@ -446,46 +405,26 @@ function getDailyAmount(rankKey) {
 // only when it isn't a round number (so "2m", not "2.0m"). Floors rather than
 // rounds so we never overflow a unit (e.g. 999,999 shows "999.9k", never
 // "1000k"). Below 1000 it's printed as-is.
-// Derived directly from AMOUNT_SUFFIXES (BigInt multipliers, largest first)
-// so fmt() and parseBet() genuinely can't drift apart — before this, fmt()
-// had its own separately hand-maintained copy of the suffix table.
-const FMT_SUFFIXES = AMOUNT_SUFFIXES.map(([suffix, power]) => [suffix, 10n ** BigInt(power)]);
-
 function fmt(n) {
-  const exact = toBigIntSafe(n);
-  const neg = exact < 0n;
-  let value = neg ? -exact : exact;
-  if (value < 1000n) return (neg ? "-" : "") + value.toString();
-  // Past 999 * (largest suffix) there's no named tier left to catch it, so
-  // the old version of this loop would just keep counting up in multiples of
-  // the biggest suffix forever (e.g. "1000vg", "40000vg" instead of ever
-  // switching to scientific notation) — check for that BEFORE the loop and
-  // route to formatScientific() instead of ever reaching a broken state.
-  const largestSuffixMult = FMT_SUFFIXES[0][1];
-  if (value >= largestSuffixMult * 1000n) return (neg ? "-" : "") + formatScientific(value);
-  for (const [suffix, mult] of FMT_SUFFIXES) {
-    if (value >= mult) {
-      const whole = value / mult;
-      const rem = value % mult;
-      const tenth = (rem * 10n) / mult;
-      return (neg ? "-" : "") + whole.toString() + (tenth ? `.${tenth}` : "") + suffix;
-    }
+  n = Math.floor(Number(n) || 0);
+  const neg = n < 0;
+  n = Math.abs(n);
+  const unit = (x, suffix) => {
+    const r = Math.floor(x * 10) / 10; // 1 decimal, floored
+    return (Number.isInteger(r) ? String(r) : r.toFixed(1)) + suffix;
+  };
+  let out;
+  if (n < 1e3) {
+    out = String(n);
+  } else {
+    // AMOUNT_SUFFIXES is ordered largest-first; find the biggest unit that
+    // fits so a whale balance always lands in the highest applicable tier
+    // (e.g. a number in the sextillions shows as "...sex", not a huge
+    // number of "qt").
+    const tier = AMOUNT_SUFFIXES.find(([, mult]) => n >= mult);
+    out = tier ? unit(n / tier[1], tier[0]) : unit(n / 1e3, "k");
   }
-  // Beyond vigintillion (10^63) there's no named suffix left, so fall back to
-  // exact scientific notation — Balatro-style "1.234e67" — built straight off
-  // the BigInt's decimal digit count rather than a float, so it's precise no
-  // matter how many digits long the number actually is. The exponent doubles
-  // as an instant "how many zeros" readout.
-  return (neg ? "-" : "") + formatScientific(value);
-}
-
-// Exact scientific notation for a non-negative BigInt, no float64 involved —
-// digit count comes straight from the string form.
-function formatScientific(value) {
-  const s = value.toString();
-  const exp = s.length - 1;
-  const mantissa = s.length > 1 ? `${s[0]}.${s.slice(1, 4)}` : s;
-  return `${mantissa}E${exp}`;
+  return (neg ? "-" : "") + out;
 }
 
 // ── Notoriety (activity leveling) ─────────────────────────────────────────────
@@ -496,24 +435,22 @@ function formatScientific(value) {
 //
 // `xp` on each tier is the CUMULATIVE XP required to reach it.
 const NOTORIETY_TIERS = [
-  { key: "nobody",      name: "Nobody",      emoji: "🚬", xp: 0,      wealthPct: 0       },
-  { key: "whisper",     name: "Whisper",     emoji: "🍃", xp: 300,    wealthPct: 0.0005  },
-  { key: "known",       name: "Known",       emoji: "👀", xp: 1200,   wealthPct: 0.001   },
-  { key: "respected",   name: "Respected",   emoji: "🤝", xp: 3500,   wealthPct: 0.002   },
-  { key: "connected",   name: "Connected",   emoji: "🕸️", xp: 9000,   wealthPct: 0.0035  },
-  { key: "feared",      name: "Feared",      emoji: "😰", xp: 22000,  wealthPct: 0.005   },
-  { key: "notorious",   name: "Notorious",   emoji: "📰", xp: 55000,  wealthPct: 0.0075  },
-  { key: "untouchable", name: "Untouchable", emoji: "🛡️", xp: 120000, wealthPct: 0.01    },
-  { key: "legend",      name: "Legend",      emoji: "🌟", xp: 210000, wealthPct: 0.015   },
-  { key: "kingpin",     name: "Kingpin",     emoji: "👑", xp: 360000, wealthPct: 0.02    },
+  { key: "nobody",      name: "Nobody",      emoji: "🚬", xp: 0,      dailyBonus: 0        },
+  { key: "whisper",     name: "Whisper",     emoji: "🍃", xp: 300,    dailyBonus: 5000     },
+  { key: "known",       name: "Known",       emoji: "👀", xp: 1200,   dailyBonus: 25000    },
+  { key: "respected",   name: "Respected",   emoji: "🤝", xp: 3500,   dailyBonus: 75000    },
+  { key: "connected",   name: "Connected",   emoji: "🕸️", xp: 9000,   dailyBonus: 200000   },
+  { key: "feared",      name: "Feared",      emoji: "😰", xp: 22000,  dailyBonus: 600000   },
+  { key: "notorious",   name: "Notorious",   emoji: "📰", xp: 55000,  dailyBonus: 1500000  },
+  { key: "untouchable", name: "Untouchable", emoji: "🛡️", xp: 120000, dailyBonus: 5000000  },
+  { key: "legend",      name: "Legend",      emoji: "🌟", xp: 210000, dailyBonus: 15000000 },
+  { key: "kingpin",     name: "Kingpin",     emoji: "👑", xp: 360000, dailyBonus: 50000000 },
 ];
 
 // In-memory cache of per-user XP and economy bans, backed by a single
 // empire_data row ("notoriety_data"). Loaded once at startup, written back on a
 // throttle so per-message XP grants don't hammer the DB.
 const _xpCache = new Map();     // userId -> total xp (number)
-const _wealthCache = new Map(); // userId -> { netWorth: bigint, updatedAt }
-const NOTORIETY_WEALTH_THRESHOLD = 1_000_000n;
 const _ecoBans = new Set();     // userIds banned from the economy
 const _xpCooldowns = new Map(); // userId -> timestamp of last XP grant (anti-spam)
 let _notorietyDirty = false;
@@ -533,7 +470,6 @@ async function loadNotoriety() {
     const v = data?.value || {};
     _xpCache.clear();
     for (const [uid, xp] of Object.entries(v.xp || {})) _xpCache.set(uid, Number(xp) || 0);
-    for (const [uid, worth] of Object.entries(v.wealth || {})) { try { _wealthCache.set(uid, { netWorth: toBigIntSafe(worth), updatedAt: Date.now() }); } catch {} }
     _ecoBans.clear();
     for (const uid of (v.bans || [])) _ecoBans.add(uid);
     console.log(`✅ Notoriety loaded — ${_xpCache.size} players, ${_ecoBans.size} banned`);
@@ -548,7 +484,7 @@ async function loadNotoriety() {
 async function saveNotoriety() {
   if (!supabase || !_notorietyLoaded) return;
   try {
-    const value = { xp: Object.fromEntries(_xpCache), bans: [..._ecoBans], wealth: Object.fromEntries([..._wealthCache.entries()].map(([uid, v]) => [uid, v.netWorth.toString()])) };
+    const value = { xp: Object.fromEntries(_xpCache), bans: [..._ecoBans] };
     await supabase.from("empire_data").upsert({ key: "notoriety_data", value }, { onConflict: "key" });
     _notorietyDirty = false;
   } catch (e) {
@@ -573,29 +509,8 @@ function getNextNotorietyTier(xp) {
   return null;
 }
 
-function setNotorietyWealth(userId, netWorth) {
-  if (!userId) return;
-  _wealthCache.set(userId, { netWorth: toBigIntSafe(netWorth), updatedAt: Date.now() });
-  _notorietyDirty = true;
-}
-
-function getNotorietyWealth(userId) {
-  return _wealthCache.get(userId)?.netWorth || 0n;
-}
-
-function getNotorietyWealthBonus(userId) {
-  const tier = getNotorietyTier(getXP(userId));
-  const worth = getNotorietyWealth(userId);
-  if (worth <= NOTORIETY_WEALTH_THRESHOLD || !tier.wealthPct) return 0n;
-  // The percentage applies ONLY to wealth above 1M. This prevents the first
-  // million from becoming a free notoriety jackpot and makes the scaling sane.
-  const excess = worth - NOTORIETY_WEALTH_THRESHOLD;
-  const basis = BigInt(Math.round(tier.wealthPct * 1_000_000));
-  return (excess * basis) / 1_000_000n;
-}
-
 function getNotorietyBonus(userId) {
-  return getNotorietyWealthBonus(userId);
+  return getNotorietyTier(getXP(userId)).dailyBonus;
 }
 
 // Grant XP for using Cosa. `source` is "chat" or "command"; each has its own
@@ -1011,8 +926,7 @@ module.exports = {
   splitBlackWhite, clearTaint,
   startLaundering, getLaunderStatus, LAUNDER_DURATION_MS,
   giftCopper, GIFT_TAX_PCT, GIFT_DAILY_CAP,
-  fromCopper, formatWallet, walletToCopper, walletToCopperExact, parseBet, multiplyMoney, fmt, formatScientific,
-  toBigIntSafe,
+  fromCopper, formatWallet, walletToCopper, parseBet, fmt,
   initEconomy, getWallet, saveWallet, saveWalletSafe, addCopper, deductCopper, payoutOrRefund, getLeaderboard, claimDaily,
   getDailyAmount, DAILY_REWARDS,
   playSlots, spinWheel, WHEEL_SEGMENTS,
@@ -1022,7 +936,7 @@ module.exports = {
   // Notoriety leveling
   NOTORIETY_TIERS, loadNotoriety, saveNotoriety,
   getXP, addXP, setXP, setNotorietyTier, resolveNotorietyTier, formatTierList,
-  getNotorietyTier, getNextNotorietyTier, getNotorietyBonus, getNotorietyWealthBonus, setNotorietyWealth, getNotorietyWealth, NOTORIETY_WEALTH_THRESHOLD,
+  getNotorietyTier, getNextNotorietyTier, getNotorietyBonus,
   isEcoBanned, setEcoBan,
   resetAllDailyCooldowns,
 };

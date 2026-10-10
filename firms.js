@@ -398,12 +398,7 @@ async function buyFirmShares(userId, ticker, amount) {
   const shareLock = firm.sanctions.some(s => s.type === "share_lock");
   if (shareLock) return `⛔ **${firm.name}** is under a **share lock** — no buying or selling allowed.`;
 
-  if (typeof amount === "string" && amount.toLowerCase() === "all") {
-    const availableShares = firm.total_shares - Object.values(firm.holdings).reduce((a, b) => a + b, 0);
-    amount = availableShares;
-  }
   if (amount < 1) return "🔫 Minimum 1 share.";
-  if (!Number.isSafeInteger(amount)) return "🔫 Quantity too large. Use stock market for giant trades.";
   const availableShares = firm.total_shares - Object.values(firm.holdings).reduce((a, b) => a + b, 0);
   if (amount > availableShares) return `🔫 Only **${availableShares.toLocaleString()}** shares available to buy.`;
 
@@ -463,10 +458,8 @@ async function sellFirmShares(userId, ticker, amount) {
   if (shareLock) return `⛔ **${firm.name}** is under a **share lock** — no buying or selling allowed.`;
 
   const owned = firm.holdings[userId] || 0;
-  if (typeof amount === "string" && amount.toLowerCase() === "all") amount = owned;
   if (owned < amount) return `🔫 You only own **${owned.toLocaleString()}** share(s).`;
   if (amount < 1) return "🔫 Minimum 1 share.";
-  if (!Number.isSafeInteger(amount)) return "🔫 Quantity too large. Use stock market for giant trades.";
 
   const payout = firm.share_price * amount;
   if (firm.treasury < payout) return `🔫 Firm treasury too low to cover this sale. Treasury: **${formatCopper(firm.treasury)}**. Ask the owner to deposit funds.`;
@@ -944,7 +937,7 @@ const FIRM_HELP = [
   "  Cosa firm deposit [TICKER] [amount]       ← owner: fund treasury",
   "  Cosa firm dividends [TICKER] [amount]     ← owner: pay all shareholders",
   "  Cosa firm buy [TICKER] [shares]           ← buy shares in a firm",
-  "  Cosa firm sell [TICKER] [shares]         ← or \"all\"",
+  "  Cosa firm sell [TICKER] [shares]          ← sell shares back",
   "  Cosa firm info [TICKER]                   ← firm details",
   "  Cosa firm list                            ← all active firms",
   "  Cosa firm portfolio                       ← your holdings + P&L",
