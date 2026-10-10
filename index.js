@@ -1,6 +1,44 @@
 // build: bank-robbery + vault-alarm v2 — 2026-07-30
 require("dotenv").config();
 const { Client, GatewayIntentBits, Events, PermissionFlagsBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
+
+// ── Slash-command description guard ──────────────────────────────────────────
+// Discord rejects any slash-command / option description over 100 characters,
+// and discord.js validates that the instant a builder runs — i.e. while this
+// file is still LOADING — so one overlong description anywhere used to kill the
+// whole bot on startup ("ExpectedConstraintError … expected.length <= 100").
+// This trims such a description to 100 chars (with a warning naming it) instead
+// of crashing. Normal descriptions pass through untouched.
+(() => {
+  const BUILDERS = [
+    "SlashCommandBuilder", "SlashCommandSubcommandBuilder", "SlashCommandSubcommandGroupBuilder",
+    "SlashCommandStringOption", "SlashCommandIntegerOption", "SlashCommandNumberOption",
+    "SlashCommandBooleanOption", "SlashCommandUserOption", "SlashCommandChannelOption",
+    "SlashCommandRoleOption", "SlashCommandMentionableOption", "SlashCommandAttachmentOption",
+  ];
+  let patched = 0;
+  try {
+    const dj = require("discord.js");
+    for (const name of BUILDERS) {
+      try {
+        const proto = dj[name] && dj[name].prototype;
+        const orig = proto && proto.setDescription;
+        if (typeof orig !== "function") continue;
+        proto.setDescription = function (d) {
+          if (typeof d === "string" && d.length > 100) {
+            console.warn(`[SLASH] description is ${d.length} chars (max 100) — trimmed: "${d.slice(0, 50)}…"`);
+            d = d.slice(0, 99) + "…";
+          }
+          return orig.call(this, d);
+        };
+        // Only count it if the assignment really took (a frozen prototype would
+        // silently ignore it, and the startup log shouldn't claim coverage it lacks).
+        if (proto.setDescription !== orig) patched++;
+      } catch (e) { /* leave this builder alone */ }
+    }
+  } catch (e) { console.warn("[SLASH] description guard not installed:", e.message); }
+  console.log(`🛡️ Slash description guard active on ${patched}/${BUILDERS.length} builder types.`);
+})();
 const Groq = require("groq-sdk");
 const { AttachmentBuilder } = require("discord.js");
 const chessModule = require("./chess.js");
@@ -8743,7 +8781,7 @@ const commands = [
     .toJSON(),
   new SlashCommandBuilder()
     .setName("reset-bank")
-    .setDescription("Reset one player's bank account entirely — balance to 0, vault tier back to Shoebox (Mr.EnderLavender only)")
+    .setDescription("Reset a player's bank: balance to 0, vault back to Shoebox (Mr.EnderLavender only)")
     .addUserOption(opt => opt.setName("user").setDescription("Whose bank to reset").setRequired(true))
     .toJSON(),
   new SlashCommandBuilder()
@@ -10984,4 +11022,5 @@ async function init() {
   client.login(process.env.DISCORD_TOKEN);
 }
 
+init().catch(err => { console.error("Fatal startup error:", err.message); process.exit(1); }); // redeploy trigger
 init().catch(err => { console.error("Fatal startup error:", err.message); process.exit(1); }); // redeploy trigger
