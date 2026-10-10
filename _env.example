@@ -1,7 +1,20 @@
 DISCORD_TOKEN=your_discord_bot_token_here
 GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL_CHAT=openai/gpt-oss-120b
-GROQ_MODEL_PARSE=openai/gpt-oss-120b
+# Optional extra keys — the bot rotates between them when one is rate-limited.
+# GROQ_API_KEY_2=
+# GROQ_API_KEY_3=
+
+# ── AI models (all optional — these are the defaults) ─────────────────────────
+# Qwen3-32B runs in non-thinking mode: fast, cheap on tokens, natural in roleplay.
+GROQ_MODEL_CHAT=qwen/qwen3-32b
+GROQ_MODEL_PARSE=qwen/qwen3-32b
+# Used automatically if the primary is rate-limited or Groq reports it retired.
+# Use a different model family: each Groq model has its own quota bucket.
+GROQ_MODEL_CHAT_FALLBACK=llama-3.3-70b-versatile
+GROQ_MODEL_PARSE_FALLBACK=llama-3.3-70b-versatile
+# Minimum "typing" time before an AI reply, in ms (was a fixed 5000). 0 = instant.
+AI_MIN_REPLY_DELAY_MS=1200
+
 SUPABASE_URL=your_supabase_project_url_here
 # Use the Supabase service_role key ONLY on the private Render server.
 SUPABASE_KEY=your_supabase_service_role_key_here

@@ -1096,6 +1096,17 @@ async function buyStock(userId, ticker, shares) {
   ticker = ticker.toUpperCase();
   if (!STOCKS[ticker]) return `🔫 Unknown stock. Valid: ${Object.keys(STOCKS).join(", ")}`;
   if (!stockMarketOpen) return "🔫 The market is closed. Don's orders.";
+  // "all" = spend the whole balance on whole shares (mirrors sellStock's "all").
+  // The command parser and the help text both advertise `stock buy X all`, but
+  // this function only understood numbers — "all" fell through toBigIntSafe()
+  // as 0 and every player got "Buy at least 1 share."
+  if (typeof shares === "string" && shares.trim().toLowerCase() === "all") {
+    const unitPrice = BigInt(Math.max(0, Math.floor(stockPrices[ticker] || 0)));
+    if (unitPrice < 1n) return "🔫 That stock has no price right now. Try again in a moment.";
+    const wallet = await eco.getWallet(userId);
+    shares = eco.toBigIntSafe(wallet.copper) / unitPrice;
+    if (shares < 1n) return `🔫 You can't afford even 1 share of **${ticker}** right now.`;
+  }
   if (shares < 1) return "🔫 Buy at least 1 share.";
 
   const price = Math.max(0, Math.floor(stockPrices[ticker] || 0));
