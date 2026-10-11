@@ -1,6 +1,35 @@
 DISCORD_TOKEN=your_discord_bot_token_here
 GROQ_API_KEY=your_groq_api_key_here
+# Optional extra keys — the bot rotates between them when one is rate-limited.
+# GROQ_API_KEY_2=
+# GROQ_API_KEY_3=
+
+# ── AI models (all optional — these are the defaults) ─────────────────────────
+# Groq retires models without warning, so the bot tries a CHAIN: primary ->
+# fallback -> last resort, skipping any model that doesn't exist on your account
+# or is rate-limited (each model has its own per-minute token cap). At startup it
+# logs which models your account can actually use.
+# IMPORTANT: if these are set on your host, they OVERRIDE the defaults — delete
+# any old ones (e.g. qwen/qwen3-32b, llama-3.3-70b-versatile, gpt-oss) there.
+GROQ_MODEL_CHAT=qwen/qwen3.8-27b
+GROQ_MODEL_PARSE=qwen/qwen3.8-27b
+GROQ_MODEL_CHAT_FALLBACK=openai/gpt-oss-120b
+GROQ_MODEL_PARSE_FALLBACK=openai/gpt-oss-120b
+GROQ_MODEL_LAST_RESORT=openai/gpt-oss-20b
+# Minimum "typing" time before an AI reply, in ms (was a fixed 5000). 0 = instant.
+AI_MIN_REPLY_DELAY_MS=1200
+
 SUPABASE_URL=your_supabase_project_url_here
-SUPABASE_KEY=your_supabase_anon_key_here
+# Use the Supabase service_role key ONLY on the private Render server.
+SUPABASE_KEY=your_supabase_service_role_key_here
 ALPHA_VANTAGE_KEY=your_key_here
 TAVILY_API_KEY=your_tavily_key_here
+
+# ── Optional: bot anti-spam (OFF by default) ──────────────────────────────────
+# Warns, then times out, players who fire many messages AT Cosa in a short burst.
+# Never touches the Don/devs; ignores chatter that isn't aimed at Cosa.
+# ANTISPAM=on
+# SPAM_WINDOW_MS=2000
+# SPAM_MSG_THRESHOLD=3
+# SPAM_WARNS_TO_MUTE=3
+# SPAM_MUTE_MINUTES=30

@@ -66,8 +66,13 @@ async function createGang(userId, name) {
   const existing = await getGangByName(name);
   if (existing) return { success: false, reason: "A gang with that name already exists." };
 
-  const { data: gang, error } = await supabase.from("gangs").insert({ name, leader_id: userId, treasury: 0 }).select().maybeSingle();
+  const { data: inserted, error } = await supabase.from("gangs").insert({ name, leader_id: userId, treasury: 0 }).select().maybeSingle();
   if (error) { console.error("[GANG CREATE]", error.message); return { success: false, reason: "Database error creating gang: " + error.message }; }
+  // maybeSingle() returns null WITHOUT an error when the inserted row isn't
+  // readable back (row-level security, replica lag). The next line used to crash
+  // with "Cannot read properties of null (reading 'id')" — look it up instead.
+  const gang = inserted || await getGangByName(name);
+  if (!gang) return { success: false, reason: "The gang was created but I couldn't read it back. Try **Cosa gang info** in a moment." };
 
   const { error: memberError } = await supabase.from("gang_members").insert({ gang_id: gang.id, user_id: userId, role: "leader" });
   if (memberError) { console.error("[GANG CREATE MEMBER]", memberError.message); return { success: false, reason: "Database error adding you as leader: " + memberError.message }; }
