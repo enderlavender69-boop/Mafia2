@@ -58,3 +58,19 @@ exact BigInt money math, elite stocks, persistence) with the chat/ping/model fix
 - Groq's free tier caps tokens **per minute per model** (e.g. 8,000 on gpt-oss); the chain spreads load across
   three models, but a very busy server can still hit the cap.
 - `/leaderboard`, `/auditlog` etc. depend on your database tables existing.
+
+## Update: "the AI can only say 'The' / 'I'" (root causes and fixes)
+Your Groq logs showed `qwen3.8-27b` "succeeding" with replies shrinking 20 → 2 tokens, plus 429s that never reached the fallback.
+- **Cut-off replies poisoned the history.** The shared 20-message history stored the one-word replies, and each new reply
+  imitated them. Now: cut-off replies are detected (`I`, `I'm`, `Mr`, `The`, `You`…), retried on a **different model with a clean slate**
+  (no history), never stored, and any that slipped in are filtered. A model that cuts off twice in 5 min is benched for 5 min.
+- **Qwen misread a trailing `system` note** (speaker card / retry nudge) as a fake user turn. Now every request ends on a real user turn;
+  system notes are folded into it.
+- **Fallback never ran because the SDK retried 429s silently on the same model** (and kept burning tokens after our timeout).
+  Now `maxRetries: 0` + a real 20 s request timeout, so a 429 fails over to the next model immediately.
+- **Token limit:** prompts were ~3,000 tokens against per-minute caps of ~6–8K (≈2 chats/min). The persona is ~35% shorter (same rules,
+  checked by a test), identity/speaker text is compact, history is capped at 650 tokens, and the bot now **learns each model's cap from
+  Groq's 429 text**, reserves budget before sending, and routes to a model with room *before* getting rejected. Prompt ≈ 2,100 tokens.
+- Persona now says: always reply with at least one complete sentence, never a single word.
+- If Qwen still misbehaves for you, set `GROQ_MODEL_CHAT=openai/gpt-oss-120b` on Render (steadier, less "human"); the log lines
+  `[AI CUT-OFF]` show how often it happens and which model did it.

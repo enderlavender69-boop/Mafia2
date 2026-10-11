@@ -18,6 +18,8 @@ GROQ_MODEL_PARSE_FALLBACK=openai/gpt-oss-120b
 GROQ_MODEL_LAST_RESORT=openai/gpt-oss-20b
 # Minimum "typing" time before an AI reply, in ms (was a fixed 5000). 0 = instant.
 AI_MIN_REPLY_DELAY_MS=1200
+# Max tokens of recent chat history sent with each AI request (default 650). Lower = cheaper/faster.
+# AI_HISTORY_TOKENS=650
 
 SUPABASE_URL=your_supabase_project_url_here
 # Use the Supabase service_role key ONLY on the private Render server.
