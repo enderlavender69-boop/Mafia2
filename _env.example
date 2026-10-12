@@ -20,6 +20,9 @@ GROQ_MODEL_LAST_RESORT=openai/gpt-oss-20b
 AI_MIN_REPLY_DELAY_MS=1200
 # Max tokens of recent chat history sent with each AI request (default 650). Lower = cheaper/faster.
 # AI_HISTORY_TOKENS=650
+# Per-player cooldown between AI chats, in ms (default 3000; Don/devs exempt) and max simultaneous AI chats (default 6).
+# AI_USER_COOLDOWN_MS=3000
+# AI_MAX_INFLIGHT=6
 
 SUPABASE_URL=your_supabase_project_url_here
 # Use the Supabase service_role key ONLY on the private Render server.

@@ -1,0 +1,73 @@
+cosa balance
+cosa daily
+cosa work
+cosa crime
+cosa scavenge
+cosa smuggle
+cosa quests
+cosa cooldowns
+cosa jobs
+cosa shop
+cosa inventory
+cosa leaderboard
+cosa rank
+cosa profile
+cosa notoriety
+cosa bank
+cosa bank deposit 100
+cosa bank withdraw 50
+cosa bank upgrade
+cosa vault
+cosa loan 100
+cosa stocks
+cosa stock buy TITAN 1
+cosa stock buy TITAN all
+cosa stock sell TITAN all
+cosa stock portfolio
+cosa exchange
+cosa market
+cosa firms
+cosa firm info ACME
+cosa firm buy ACME 5
+cosa gangs
+cosa gang create TestGang
+cosa gang info
+cosa turf
+cosa turf map
+cosa bounties
+cosa bounty list
+cosa businesses
+cosa business shop
+cosa buy business laundromat
+cosa collect
+cosa slots 100
+cosa coinflip 100 heads
+cosa roulette 100 red
+cosa blackjack 100
+cosa mines 100
+cosa arena
+cosa mysterybox
+cosa rob @someone
+cosa pay 10
+cosa prestige
+cosa prestige tree
+cosa prestige leave
+cosa prestige buy 1
+cosa lifetime leaderboard
+cosa raffle
+cosa hangman
+cosa chess
+cosa marry
+cosa shield
+cosa alliances
+cosa rival
+cosa notoriety roles
+cosa eco help
+cosa rank help
+cosa help
+cosa 5 vg
+cosa stock buy TITAN 5k
+M:cosa networth
+M:cosa god mode on
+M:cosa say hello
+M:cosa shadow list

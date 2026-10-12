@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "test": "node test.js",
-    "validate": "node scripts/validate-commands.js"
+    "validate": "node scripts/validate-commands.js",
+    "check": "node scripts/check.js",
+    "smoke": "node tests/smoke.js"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.100",

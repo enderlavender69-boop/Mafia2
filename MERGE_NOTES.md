@@ -74,3 +74,15 @@ Your Groq logs showed `qwen3.8-27b` "succeeding" with replies shrinking 20 → 2
 - Persona now says: always reply with at least one complete sentence, never a single word.
 - If Qwen still misbehaves for you, set `GROQ_MODEL_CHAT=openai/gpt-oss-120b` on Render (steadier, less "human"); the log lines
   `[AI CUT-OFF]` show how often it happens and which model did it.
+
+## Update: quality, fairness and tooling
+- **Per-player AI cooldown** (3 s, Don/devs exempt) with an ⏳ reaction, so one person can't drain the shared token budget.
+- **Per-channel chat memory** (a roast in #general no longer bleeds into #games); history is still stored per server.
+- **Anti-repetition:** if the model repeats itself it's asked once for a fresh take.
+- **Voice examples** in the persona (what a full in-character reply to a bare "cosa" looks like).
+- **`cosa ai status`** (Don/devs): model health, learned rate-limit caps, cut-off/repeat/throttle counters.
+- **Friendlier failures:** players get an in-character line; the Don/devs also get the technical reason.
+- **`npm run check`:** one command runs every test (syntax, slash limits, 190+ unit checks, and a full boot of the bot with fake
+  messages). Proven to fail on a broken copy. README rewritten.
+- Systematic scans found no further handler gaps: 243 detected command actions all have handlers, and 197 documented commands
+  were run through the real message handler (the remaining "silent" ones are Don/mod-only commands run as a normal player).
