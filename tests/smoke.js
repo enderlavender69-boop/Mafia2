@@ -51,6 +51,9 @@ const discordBase = {
   GatewayIntentBits: nums(), Partials: nums(), ChannelType: nums(), ButtonStyle: nums(), TextInputStyle: nums(), ActivityType: nums(),
   PermissionFlagsBits: bigs(), AuditLogEvent: nums(), OverwriteType: nums(), MessageFlags: nums(), ComponentType: nums(),
   PermissionsBitField: { Flags: bigs() },
+  // Recording EmbedBuilder: any builder method is a harmless chainable no-op, but the description is
+  // kept in .data so tests can read back what a command would actually have shown.
+  EmbedBuilder: class { constructor() { const data = {}; const p = new Proxy({}, { get: (t, k) => k === "data" ? data : k === "toJSON" ? () => data : k === "then" ? undefined : k === "setDescription" ? (d) => { data.description = d; return p; } : () => p }); return p; } },
   REST: class { constructor() {} setToken() { return this; } async put() { return []; } async get() { return []; } },
   Routes: new Proxy({}, { get: () => () => "/route" }),
 };
@@ -71,8 +74,17 @@ function query(single = false) {
 const supabaseStub = { createClient: () => new Proxy({}, { get: () => (...a) => query() }) };
 
 // ───────────── groq stand-in (scriptable) ─────────────
+// Groq (like OpenAI) REJECTS messages with unknown fields — a stand-in that accepts anything hid exactly that bug once.
+function assertGroqSchema(b) {
+  const ok = new Set(["role", "content", "name", "tool_calls", "tool_call_id"]);
+  (b.messages || []).forEach((m, i) => {
+    for (const k of Object.keys(m)) if (!ok.has(k)) throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : for 'role:${m.role}' the following must be satisfied[('messages.${i}' : property '${k}' is unsupported)]","type":"invalid_request_error"}}`), { status: 400 });
+    if (typeof m.content !== "string") throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : content must be a string"}}`), { status: 400 });
+  });
+}
 const GROQ = { calls: [], script: [], models: ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "whisper-large-v3"] };
 class Groq { constructor() { this.chat = { completions: { create: async (body) => {
+    assertGroqSchema(body);
     GROQ.calls.push(JSON.parse(JSON.stringify(body)));
     const s = GROQ.script.length ? GROQ.script.shift() : { content: "Yo. What's the move?" };
     if (s.err) throw Object.assign(new Error(s.err), { status: s.status });
@@ -232,7 +244,7 @@ async function settle(m, ms = 600) { for (let i = 0; i < 40; i++) { await wait(m
     for (const [c, group, sub, opts] of jobs) {
       for (const who of ["user", "master"]) {
         const label = "/" + c.name + (group ? " " + group : "") + (sub ? " " + sub : "") + (who === "master" ? " (as Don)" : "");
-        if (who === "master" && !/(admin|reset|setup|god|grant|give|set|remove|ban|mod|dev|lock|clone|exile|shadow|jarvis)/i.test(c.name + (sub || ""))) continue;
+        if (who === "master" && !/(admin|reset|setup|god|grant|give|set|remove|ban|mod|dev|lock|clone|exile|shadow|jarvis|don)/i.test(c.name + (sub || ""))) continue;
         const e0 = errs.length, f0 = fatal.length; const msg = mkMsg("x", { authorId: who === "master" ? MASTER : "SL" + (++n0) });
         const rec = []; const vals = Object.fromEntries(opts.map((o) => [o.name, val(o, o)]));
         const mk = (k) => async (x) => { rec.push(typeof x === "string" ? x : JSON.stringify(x && (x.content || (x.embeds && "[embed]") || "[payload]"))); return { id: "RP", edit: async () => {}, delete: async () => {}, createMessageComponentCollector: () => new EventEmitter(), awaitMessageComponent: async () => { throw new Error("timeout"); } }; };
@@ -312,6 +324,23 @@ async function settle(m, ms = 600) { for (let i = 0; i < 40; i++) { await wait(m
   GROQ.script = [{ content: "I don't know what that is." }];
   let st2 = mkMsg("cosa ai status", { authorId: "PLAYER9", username: "Nobody" }); await send(st2); await settle(st2, 500);
   ck("a normal player does NOT get the status report", !/COSA AI STATUS/.test(st2.all().map(text).join(" ")));
+
+  origLog("\n[DON-HELP — Don only, private, lists everything]");
+  {
+    const base = mkMsg("x").message;
+    const mkIa = (userId) => { const rec = []; const ia = { id: "DH" + Math.random(), commandName: "don-help", user: { id: userId, username: "u", bot: false }, member: base.member, guild: base.guild, guildId: "G1", channel: base.channel, channelId: "C1", client: { user: { id: "BOTID" } }, replied: false, deferred: false, createdTimestamp: Date.now(), locale: "en-US",
+      isChatInputCommand: () => true, isButton: () => false, isStringSelectMenu: () => false, isModalSubmit: () => false, isAutocomplete: () => false, isCommand: () => true, isRepliable: () => true, isMessageComponent: () => false, isUserContextMenuCommand: () => false, isMessageContextMenuCommand: () => false,
+      options: { getSubcommand: () => null, getSubcommandGroup: () => null },
+      reply: async (x) => { ia.replied = true; rec.push(x); return { id: "RP" }; }, followUp: async (x) => { rec.push(x); return { id: "RP" }; }, deferReply: async () => {}, editReply: async (x) => { rec.push(x); }, fetchReply: async () => ({ id: "RP" }) }; return { ia, rec }; };
+    const dtext = (r) => r.map((x) => (x.content || "") + (x.embeds || []).map((e) => (e.data ? e.data.description : e.description) || "").join("")).join("\n");
+    const don = mkIa(MASTER_ID_); await handlers.InteractionCreate[0](don.ia); await wait(400);
+    const dt = dtext(don.rec);
+    ck("the Don gets the full list across several private messages", don.rec.length >= 3 && don.rec.length <= 10, "messages=" + don.rec.length);
+    ck("every one of those messages is ephemeral (only the Don sees it)", don.rec.every((x) => x.ephemeral === true), JSON.stringify(don.rec.map((x) => x.ephemeral)));
+    ck("the list includes player + Don-only text commands (slash lines are covered by tests/don-help.test.js)", /DON HELP/.test(dt) && /Cosa balance/.test(dt) && /Cosa bank wipe all/.test(dt) && /Cosa enable jarvis/.test(dt) && /Cosa chess bot/.test(dt), dt.slice(0, 120));
+    const pl = mkIa("PLAYER77"); await handlers.InteractionCreate[0](pl.ia); await wait(300);
+    ck("a normal player is refused, privately", pl.rec.length === 1 && pl.rec[0].ephemeral === true && /Only Mr\.EnderLavender/.test(dtext(pl.rec)) && !/Cosa balance/.test(dtext(pl.rec)), dtext(pl.rec));
+  }
 
   origLog("\n[FAILURE MESSAGES]");
   GROQ.script = Array(20).fill({ err: "500 internal error", status: 500 });

@@ -1,3 +1,11 @@
+// Groq (like OpenAI) REJECTS messages with unknown fields — a stand-in that accepts anything hid exactly that bug once.
+function assertGroqSchema(b) {
+  const ok = new Set(["role", "content", "name", "tool_calls", "tool_call_id"]);
+  (b.messages || []).forEach((m, i) => {
+    for (const k of Object.keys(m)) if (!ok.has(k)) throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : for 'role:${m.role}' the following must be satisfied[('messages.${i}' : property '${k}' is unsupported)]","type":"invalid_request_error"}}`), { status: 400 });
+    if (typeof m.content !== "string") throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : content must be a string"}}`), { status: 400 });
+  });
+}
 const fs=require("fs"), vm=require("vm");
 const SRC=fs.readFileSync(require("path").join(__dirname, "..", "index.js"),"utf8");
 const slice=(a,b)=>{const i=SRC.indexOf(a); if(i<0) throw new Error("missing "+a); const j=SRC.indexOf(b,i); if(j<0) throw new Error("missing "+b); return SRC.slice(i,j);};
@@ -6,7 +14,7 @@ const pipe=slice("// ── GROQ AI Setup — Multi-key rotation","// ── API
 const guard=slice("const REFUSAL_OPENER_RE","async function getAIResponse(");
 function mk(script,env={}){
   const rec=[], ctorOpts=[], reqOpts=[], logs=[];
-  class Groq{ constructor(o){ ctorOpts.push(o); this.chat={completions:{create:async(b,ro)=>{ rec.push({t:Date.now(),b:JSON.parse(JSON.stringify(b))}); reqOpts.push(ro); const s=script.shift(); if(!s) throw Object.assign(new Error("script exhausted"),{status:500}); if(s.delay) await new Promise(r=>setTimeout(r,s.delay)); if(s.err) throw Object.assign(new Error(s.err),{status:s.status}); return {choices:[{message:{content:s.content}}],usage:s.usage};}}}; } }
+  class Groq{ constructor(o){ ctorOpts.push(o); this.chat={completions:{create:async(b,ro)=>{ assertGroqSchema(b); rec.push({t:Date.now(),b:JSON.parse(JSON.stringify(b))}); reqOpts.push(ro); const s=script.shift(); if(!s) throw Object.assign(new Error("script exhausted"),{status:500}); if(s.delay) await new Promise(r=>setTimeout(r,s.delay)); if(s.err) throw Object.assign(new Error(s.err),{status:s.status}); return {choices:[{message:{content:s.content}}],usage:s.usage};}}}; } }
   const ctx={process:{env:{GROQ_API_KEY:"k",...env}},console:{log:(...a)=>logs.push(a.join(" ")),warn:(...a)=>logs.push("W:"+a.join(" ")),error:(...a)=>logs.push("E:"+a.join(" "))},Groq,setTimeout,clearTimeout,Promise,Date,Math,JSON,Object,Array,Set,Map,String,Number,Error,
     Client:class{constructor(o){this.options=o}},GatewayIntentBits:new Proxy({}, {get:()=>1}),Partials:new Proxy({}, {get:()=>1}),global:{},HISTORY_TOKEN_CAP:650};
   vm.createContext(ctx);
@@ -53,6 +61,16 @@ const TPM=(m,lim=6000,used=5800)=>({err:`429 Rate limit reached for model \`${m}
   m=mk([{content:"ok"}]); await m.A.rateLimitedGroqCall([...U("hello"),{role:"system",content:"SPEAKER CARD"}],{});
   ck("the real request sent to Groq ends on a user turn", m.rec[0].b.messages[m.rec[0].b.messages.length-1].role==="user" && /SPEAKER CARD/.test(m.rec[0].b.messages[m.rec[0].b.messages.length-1].content));
 
+  console.log("\n[5b] Internal fields never reach the API (regression: 'property ch is unsupported' 400)");
+  const dirty=[{role:"system",content:"SYS"},{role:"user",content:"a",ch:"C1",extra:1},{role:"assistant",content:"b",ch:"C1",ts:5},{role:"user",content:"c",ch:"C2"}];
+  const nn=m.A.normalizeForChatTemplate(dirty);
+  ck("normalize strips every field except role + content", nn.every(x=>Object.keys(x).sort().join()==="content,role"), JSON.stringify(nn.map(x=>Object.keys(x))));
+  const hp=m.A.historyForPrompt([{role:"user",content:"hi",ch:"C1"},{role:"assistant",content:"Yeah, what's the move?",ch:"C1"}],"C1");
+  ck("historyForPrompt hands back clean role+content copies", hp.every(x=>Object.keys(x).sort().join()==="content,role") && hp.length===2);
+  const origHist=[{role:"user",content:"hi",ch:"C1"}]; m.A.historyForPrompt(origHist,"C1"); ck("…and does not mutate the stored history", origHist[0].ch==="C1");
+  m=mk([{content:"ok"}]); await m.A.rateLimitedGroqCall(dirty,{});
+  ck("a request built from tagged history is accepted by a schema-checking Groq (no 400)", m.rec.length===1 && m.rec[0].b.messages.every(x=>Object.keys(x).sort().join()==="content,role"));
+
   console.log("\n[6] Cut-off reply detector (the 'I' / 'Mr' / 'The' replies)");
   const D=m.A.looksDegenerate;
   for(const bad of ["I","II","Mr","The","I'm","I'm here, Mr","I can","You","I'm here, Mr.","To","","  ","?!"]) ck(`cut-off: ${JSON.stringify(bad)}`, D(bad));
@@ -88,7 +106,7 @@ const TPM=(m,lim=6000,used=5800)=>({err:`429 Rate limit reached for model \`${m}
   ck("real user lines are kept", h.filter(x=>x.role==="user").length===3);
   const long=Array.from({length:30},(_,i)=>({role:i%2?"assistant":"user",content:"word ".repeat(60)+i}));
   const hl=m.A.historyForPrompt(long); const tok=hl.reduce((a,x)=>a+Math.ceil(x.content.length/3.6)+4,0);
-  ck("long history is capped to the token budget (650)", tok<=650+80 && hl.length<long.length && hl[hl.length-1]===long[long.length-1], `tokens=${tok} kept=${hl.length}`);
+  ck("long history is capped to the token budget (650)", tok<=650+80 && hl.length<long.length && hl[hl.length-1].content===long[long.length-1].content, `tokens=${tok} kept=${hl.length}`);
   ck("the newest message is always kept even if it alone exceeds the cap", m.A.historyForPrompt([{role:"user",content:"x".repeat(9000)}]).length===1);
 
   console.log("\n[8b] Repeat detector");

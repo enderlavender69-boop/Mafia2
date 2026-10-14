@@ -1,3 +1,11 @@
+// Groq (like OpenAI) REJECTS messages with unknown fields — a stand-in that accepts anything hid exactly that bug once.
+function assertGroqSchema(b) {
+  const ok = new Set(["role", "content", "name", "tool_calls", "tool_call_id"]);
+  (b.messages || []).forEach((m, i) => {
+    for (const k of Object.keys(m)) if (!ok.has(k)) throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : for 'role:${m.role}' the following must be satisfied[('messages.${i}' : property '${k}' is unsupported)]","type":"invalid_request_error"}}`), { status: 400 });
+    if (typeof m.content !== "string") throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : content must be a string"}}`), { status: 400 });
+  });
+}
 const fs=require("fs"), vm=require("vm");
 const SRC=fs.readFileSync(require("path").join(__dirname, "..", "index.js"),"utf8");
 const slice=(a,b)=>{const i=SRC.indexOf(a); if(i<0) throw new Error("missing "+a); const j=SRC.indexOf(b,i); if(j<0) throw new Error("missing "+b); return SRC.slice(i,j);};

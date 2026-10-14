@@ -1,3 +1,11 @@
+// Groq (like OpenAI) REJECTS messages with unknown fields — a stand-in that accepts anything hid exactly that bug once.
+function assertGroqSchema(b) {
+  const ok = new Set(["role", "content", "name", "tool_calls", "tool_call_id"]);
+  (b.messages || []).forEach((m, i) => {
+    for (const k of Object.keys(m)) if (!ok.has(k)) throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : for 'role:${m.role}' the following must be satisfied[('messages.${i}' : property '${k}' is unsupported)]","type":"invalid_request_error"}}`), { status: 400 });
+    if (typeof m.content !== "string") throw Object.assign(new Error(`400 {"error":{"message":"'messages.${i}' : content must be a string"}}`), { status: 400 });
+  });
+}
 // Extracts the REAL code from index.js (not a re-implementation) and exercises it.
 const fs = require("fs");
 const vm = require("vm");
@@ -27,6 +35,7 @@ async function runPipeline(script, { keys = ["k1"], env = {}, opts = {}, calls =
   class Groq {
     constructor() {
       this.chat = { completions: { create: async (body) => {
+        assertGroqSchema(body);
         received.push(JSON.parse(JSON.stringify(body)));
         const step = script.shift();
         if (!step) throw Object.assign(new Error("script exhausted"), { status: 500 });

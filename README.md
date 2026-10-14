@@ -41,6 +41,7 @@ came from an env var or the code default.
 - **Pings:** the bot may ping individual *users* only. `@everyone`, `@here` and roles are blocked everywhere, and
   nothing the AI writes can ping anyone.
 - **Fairness:** one person can't drain the shared token budget (`AI_USER_COOLDOWN_MS`, default 3 s; the Don/devs are exempt).
+- **`/don-help`** (Mr.EnderLavender only, private): every slash + text command in one list. Built from the live command array and `donhelp.js`; `tests/don-help.test.js` fails if a command is added to the parsers without being listed.
 - **Diagnostics:** the Don/devs can type **`cosa ai status`** to see each model's health, rate-limit windows and counters.
 
 ## Troubleshooting
@@ -50,6 +51,8 @@ came from an env var or the code default.
 | "Something broke on my end" | `cosa ai status` (Don/devs also see the reason in the error message). |
 | Bot crashes at startup | Run `npm run validate` — a slash-command description over 100 characters kills the bot at load. |
 | A model "doesn't exist" | The boot log lists the models your Groq account can use; set `GROQ_MODEL_CHAT` to one of them. |
+| Bot silent after deploy; log shows `HTTP 429 ... blocked ... global rate limits` | Discord is blocking the **host's IP** (shared hosts like Render, caused by other apps on that IP). Not a token/code problem. The bot now waits out Discord's `retry-after` and logs in by itself — watch for `⛔ Discord is temporarily blocking...` then `✅ Discord login complete`. Don't keep redeploying. `GET /status` on your Render URL shows the live state (`blocked`, `logging-in`, `connected`, `fatal`). |
+| `property 'ch' is unsupported` (400) in AI replies | Old build leaking the internal channel tag into the Groq request. Fixed (`normalizeForChatTemplate` + `historyForPrompt`, covered by `tests/ai-chat.test.js` [5b]) — make sure this build is the one deployed. |
 | Everything answered twice | Make sure only **one** instance of the bot is running on the host. |
 
 ## Project layout

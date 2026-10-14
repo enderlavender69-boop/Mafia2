@@ -19,6 +19,7 @@ const { tickFirmCandles } = require("./firmchart.js");
 const leaderboard = require("./leaderboard.js");
 const { cloneServerStructure } = require("./cloneServer.js");
 const devaccess = require("./devaccess.js");
+const donhelp = require("./donhelp.js");
 const gangs = require("./gangs.js");
 const turf = require("./turf.js");
 const businesses = require("./businesses.js");
@@ -2846,9 +2847,12 @@ function normalizeForChatTemplate(messages) {
   const out = [];
   const notes = [];
   for (const m of messages) {
+    // ONLY role + content ever go to the API. Groq rejects any other field with a 400
+    // ("property 'ch' is unsupported") — internal bookkeeping (like a history line's
+    // channel tag) must never leak into a request.
     if (m.role === "system" && out.length === 0) out.push({ role: "system", content: m.content });
     else if (m.role === "system") notes.push(m.content);
-    else out.push({ ...m });
+    else out.push({ role: m.role, content: m.content });
   }
   if (notes.length) {
     const tail = "\n\n[SYSTEM NOTE — added by the bot, not written by the user; never quote or mention it]\n" + notes.join("\n\n");
@@ -3310,7 +3314,7 @@ function historyForPrompt(list, channelId) {
   for (let i = clean.length - 1; i >= 0; i--) {
     const t = Math.ceil(String(clean[i].content).length / 3.6) + 4;
     if (out.length && tokens + t > HISTORY_TOKEN_CAP) break;
-    out.unshift(clean[i]);
+    out.unshift({ role: clean[i].role, content: clean[i].content });   // drop bookkeeping fields (ch)
     tokens += t;
   }
   return out;
@@ -9899,6 +9903,13 @@ const commands = [
     .setName("devlist")
     .setDescription("List everyone with developer access (Mr.EnderLavender only, private)")
     .toJSON(),
+  // Discord slash-command names must be lowercase, so this is "/don-help" (typing "/Don-help" works —
+  // Discord's picker is case-insensitive). The list is built from THIS array + the text-command
+  // registry in donhelp.js, so it always includes every command.
+  new SlashCommandBuilder()
+    .setName("don-help")
+    .setDescription("List EVERY Cosa command, slash and text (Mr.EnderLavender only, visible only to you)")
+    .toJSON(),
 ];
 
 const LOYALTY_HELP_TEXT =
@@ -12021,6 +12032,24 @@ async function init() {
           ).catch(() => {});
         }
       }
+      // ── /don-help — Don ONLY (strictly Mr.EnderLavender; not even granted developers), private ──
+      if (interaction.commandName === "don-help") {
+        if (interaction.user.id !== MASTER_ID) {
+          await interaction.reply({ content: "🔫 Only Mr.EnderLavender can use this.", ephemeral: true }).catch(() => {});
+          return;
+        }
+        // Built from the live `commands` array + the text-command registry, so nothing is left out.
+        // One embed per message (Discord caps all embeds in a message at 6000 chars combined);
+        // the code block keeps usage lines aligned and stops Discord from mangling [brackets]/_underscores_.
+        const pages = donhelp.buildDonHelpPages(commands);
+        const toEmbed = (p, i) => new EmbedBuilder().setColor(0x8B0000)
+          .setDescription("```\n" + p + "\n```").setFooter({ text: `Don Help — page ${i + 1}/${pages.length}` });
+        await interaction.reply({ embeds: [toEmbed(pages[0], 0)], ephemeral: true }).catch(() => {});
+        for (let i = 1; i < pages.length; i++) {
+          await interaction.followUp({ embeds: [toEmbed(pages[i], i)], ephemeral: true }).catch(() => {});
+        }
+        return;
+      }
       if (interaction.commandName === "help") {
         // Embed description (limit 4096) — the plain body was ~2.3k and silently
         // blew past Discord's 2000-char content cap, so /help used to fail.
@@ -12375,44 +12404,94 @@ async function init() {
     }, { priority: isDonInteraction });
   });
 
-  // Diagnostic: isolate whether basic HTTPS connectivity to Discord's REST
-  // API works at all from this host, separately from the gateway WebSocket
-  // handshake client.login() does internally. If THIS also hangs/fails, the
-  // problem is network-level (Render can't reach Discord at all) rather than
-  // anything specific to the gateway/WebSocket layer.
-  console.log("🔎 Testing raw HTTPS connectivity to Discord's REST API...");
-  const restTestStart = Date.now();
-  fetch("https://discord.com/api/v10/gateway", { signal: AbortSignal.timeout(10000) })
-    .then(async res => {
-      const bodyText = await res.text();
-      console.log(`✅ Response received (${Date.now() - restTestStart}ms) — HTTP ${res.status} — body: ${bodyText.slice(0, 300)}`);
-    })
-    .catch(err => console.error(`❌ REST connectivity FAILED (${Date.now() - restTestStart}ms):`, err.message));
+  // Keep-alive web server. Render (and most free hosts) require the process to bind to a port
+  // before a Web Service counts as "live", and an external uptime pinger can hit it to stop the
+  // free tier sleeping. GET /status also reports the Discord connection state, so "the bot is
+  // silent" can be diagnosed from a browser without digging through logs.
+  require("./keepalive.js").startKeepAlive(() => ({ ...discordConn, uptimeSec: Math.round(process.uptime()) }));
 
-  // Render (and most free-tier hosts) require the process to bind to a port
-  // to consider a Web Service "live" — without this, the bot itself runs
-  // fine but the deploy sits at "in progress" forever since Render's port
-  // scan never finds anything to detect. This also gives the external
-  // uptime-pinger (UptimeRobot etc.) something to hit to prevent the free
-  // tier from sleeping the service after 15 min idle.
-  require("./keepalive.js").startKeepAlive();
+  // Surface Discord REST rate-limit events instead of letting them stall silently.
+  try {
+    client.rest.on("rateLimited", (info) => console.warn(`[DISCORD RATE LIMIT] ${info.method} ${info.route} — ${info.global ? "GLOBAL, " : ""}retry in ${Math.ceil((info.timeToReset || 0) / 1000)}s`));
+    client.rest.on("invalidRequestWarning", (w) => console.warn(`[DISCORD] ${w.count} invalid requests so far in this window — Discord blocks an IP at 10,000 per 10 minutes.`));
+  } catch (e) { console.warn("[DISCORD] could not attach REST rate-limit logging:", e.message); }
 
-  // client.login() was previously fire-and-forget with no .catch() — if it
-  // ever rejected (bad token, network issue reaching Discord's gateway,
-  // etc.) that became an unhandled promise rejection with no context, and
-  // if the gateway connection just hung instead of rejecting, there was
-  // NO visibility into that at all: no error, no timeout, nothing. Both are
-  // now explicit.
-  console.log("🔌 Attempting Discord gateway login...");
-  const loginTimeout = setTimeout(() => {
-    console.error("⏱️ client.login() has not resolved after 30s — likely a hung gateway connection, not a rejected login (a bad token usually fails within a few seconds, not silently hangs).");
-  }, 30000);
-  client.login(process.env.DISCORD_TOKEN)
-    .then(() => clearTimeout(loginTimeout))
-    .catch((err) => {
-      clearTimeout(loginTimeout);
-      console.error("❌ client.login() rejected:", err.message);
-    });
+  connectToDiscord();   // intentionally not awaited: init() must finish so the web server stays up
+}
+
+// ── Discord connection (resilient login) ───────────────────────────────────────
+// Discord's edge can temporarily BLOCK a host's IP with HTTP 429 {"code":0,"message":"You are being
+// blocked from accessing our API temporarily due to exceeding global rate limits"}. On shared hosts
+// (Render etc.) that happens because of OTHER tenants on the same outbound IP, even when this bot did
+// nothing wrong. While blocked, discord.js just waits inside client.login() — it looked like a silent
+// hang. This probes first, waits out the ban using Discord's own retry-after (and says so in the log),
+// then logs in; real login failures are retried with backoff, and unfixable ones (bad token, missing
+// intents) are reported once instead of looping.
+const discordConn = { state: "starting", detail: "", since: new Date().toISOString(), attempts: 0, nextRetryAt: null };
+function setDiscordState(state, detail = "", nextRetryMs = 0) {
+  discordConn.state = state; discordConn.detail = detail; discordConn.since = new Date().toISOString();
+  discordConn.nextRetryAt = nextRetryMs ? new Date(Date.now() + nextRetryMs).toISOString() : null;
+}
+async function probeDiscordApi() {
+  const t0 = Date.now();
+  try {
+    const res = await fetch("https://discord.com/api/v10/gateway", { signal: AbortSignal.timeout(10000) });
+    const body = await res.text();
+    if (res.status === 429) {
+      let retryMs = 0;
+      const hdr = Number(res.headers && res.headers.get && res.headers.get("retry-after"));
+      if (hdr > 0) retryMs = hdr * 1000;
+      else { try { const j = JSON.parse(body); if (Number(j.retry_after) > 0) retryMs = Number(j.retry_after) * 1000; } catch (_) {} }
+      return { blocked: true, status: 429, retryMs, ms: Date.now() - t0, body: body.slice(0, 160) };
+    }
+    return { blocked: false, status: res.status, ms: Date.now() - t0 };
+  } catch (err) {
+    // Network trouble is NOT a ban — don't wait on it; let login() try and report its own error.
+    return { blocked: false, error: err.message, ms: Date.now() - t0 };
+  }
+}
+const isFatalLoginError = (err) => /TokenInvalid|DisallowedIntents/i.test(String(err && err.code)) || /invalid token|disallowed intents|used disallowed/i.test(String(err && err.message));
+async function connectToDiscord() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let failures = 0;
+  for (;;) {
+    discordConn.attempts++;
+    console.log("🔎 Checking Discord's API before login...");
+    const probe = await probeDiscordApi();
+    if (probe.error) console.warn(`⚠️ Discord API probe failed (${probe.ms}ms): ${probe.error} — trying to log in anyway.`);
+    else console.log(`✅ Discord API answered (${probe.ms}ms) — HTTP ${probe.status}${probe.blocked ? " — BLOCKED" : ""}`);
+    if (probe.blocked) {
+      // Honour Discord's retry-after, but re-check at least every 10 min and never faster than every 30 s.
+      const waitMs = Math.min(Math.max(probe.retryMs || 120000, 30000), 10 * 60 * 1000);
+      setDiscordState("blocked", "Discord is temporarily blocking this host's IP (HTTP 429, global rate limit)", waitMs);
+      console.error(`⛔ Discord is temporarily blocking this host's IP address (HTTP 429, "global rate limits"). This is Discord/Cloudflare, not a token or code problem — on shared hosts it is caused by other apps on the same IP. Discord says retry in ${probe.retryMs ? Math.ceil(probe.retryMs / 1000) + "s" : "an unspecified time"}. Re-checking in ${Math.round(waitMs / 1000)}s; the bot logs in automatically as soon as the block lifts. Do NOT keep redeploying — every restart is another request.`);
+      await sleep(waitMs);
+      continue;
+    }
+    setDiscordState("logging-in");
+    console.log(`🔌 Attempting Discord gateway login (attempt ${discordConn.attempts})...`);
+    const t0 = Date.now();
+    const watch = setInterval(() => console.error(`⏱️ Still waiting for Discord login after ${Math.round((Date.now() - t0) / 1000)}s (discord.js may be waiting out a rate limit — see [DISCORD RATE LIMIT] lines).`), 30000);
+    try {
+      await client.login(process.env.DISCORD_TOKEN);
+      clearInterval(watch);
+      setDiscordState("connected");
+      console.log(`✅ Discord login complete after ${Math.round((Date.now() - t0) / 1000)}s.`);
+      return;
+    } catch (err) {
+      clearInterval(watch);
+      if (isFatalLoginError(err)) {
+        setDiscordState("fatal", err.message);
+        console.error(`❌ Discord login can't succeed until you fix this: ${err.message}\n   (bad/rotated DISCORD_TOKEN, or Message Content / Server Members intents not enabled in the Discord Developer Portal → Bot.) Not retrying.`);
+        return;
+      }
+      failures++;
+      const waitMs = Math.min(30000 * failures, 5 * 60 * 1000);
+      setDiscordState("retrying", err.message, waitMs);
+      console.error(`❌ client.login() rejected: ${err.message} — retry #${failures} in ${Math.round(waitMs / 1000)}s`);
+      await sleep(waitMs);
+    }
+  }
 }
 
 init().catch(err => { console.error("Fatal startup error:", err.message); process.exit(1); });
